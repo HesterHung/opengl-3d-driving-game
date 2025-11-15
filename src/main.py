@@ -269,7 +269,9 @@ def idle():#--------------with more complex display items like turning wheel---
 
 #---------------------------------setting camera----------------------------
 def setView():
-    global eyeX, eyeY, eyeZ, windowWidth, windowHeight # Add windowWidth/Height here
+    global eyeX, eyeY, eyeZ, windowWidth, windowHeight
+    
+    # --- 1. Set the PROJECTION Matrix ---
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
 
@@ -280,16 +282,38 @@ def setView():
     # Calculate the correct aspect ratio
     aspect = float(windowWidth) / float(windowHeight)
 
-    # Replace '1' with 'aspect' in gluPerspective
-    gluPerspective(90, aspect, 0.1, 100) # <-- MODIFIED LINE
+    # Set the perspective
+    gluPerspective(90, aspect, 0.1, 100)
 
+    # --- 2. Set the MODELVIEW Matrix ---
+    # Switch to MODELVIEW mode *before* setting the camera
+    glMatrixMode(GL_MODELVIEW)
+    glLoadIdentity() # Reset the MODELVIEW matrix
+
+    # --- 3. Set the Camera (View) ---
+    # Now, all gluLookAt calls will correctly affect the MODELVIEW matrix
     if (topView == True):
-        gluLookAt(0, 10, land*gameEnlarge/2, 0, jeepObj.posY, land*gameEnlarge/2, 0, 1, 0)
+        gluLookAt(jeepObj.posX, 20.0, jeepObj.posZ,   # Eye is 20 units *above* the jeep
+                        jeepObj.posX, jeepObj.posY, jeepObj.posZ,   # Center is the jeep itself
+                        0.0, 0.0, 1.0)
     elif (behindView ==True):
-        gluLookAt(jeepObj.posX, jeepObj.posY + 1.0, jeepObj.posZ - 2.0, jeepObj.posX, jeepObj.posY, jeepObj.posZ, 0, 1, 0) 
+        behind_dist = 4.0  
+        above_dist = 2.0   
+        
+        rad_angle = math.radians(jeepObj.rotation)
+        eye_x = jeepObj.posX - behind_dist * math.sin(rad_angle)
+        eye_y = jeepObj.posY + above_dist
+        eye_z = jeepObj.posZ - behind_dist * math.cos(rad_angle)
+        
+        center_x = jeepObj.posX
+        center_y = jeepObj.posY
+        center_z = jeepObj.posZ
+
+        gluLookAt(eye_x, eye_y, eye_z,  
+                  center_x, center_y, center_z, 
+                  0, 1, 0)                   
     else:
         gluLookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0)
-    glMatrixMode(GL_MODELVIEW)
     
     glutPostRedisplay()
 
