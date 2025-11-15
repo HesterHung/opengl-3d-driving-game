@@ -6,6 +6,8 @@ import math, time, random, csv, datetime
 import ImportObject
 import PIL.Image as Image
 import jeep, cone, star
+import tkinter as tk            
+from tkinter import ttk          
 
 # windowSize = 600
 windowWidth = 600
@@ -667,7 +669,77 @@ def initializeLight():
     glClearColor(0.1, 0.1, 0.1, 0.0)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~the finale!!!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+def show_launcher():
+    global windowWidth, windowHeight, isFullScreen
+
+    # This function is called when the "Start" button is clicked
+    def start_game():
+        global windowWidth, windowHeight, isFullScreen
+        
+        # Get the selected option (e.g., "800x800" or "Start in Fullscreen")
+        selection = selection_var.get()
+
+        if selection == "Start in Fullscreen":
+            isFullScreen = True
+            # We must set a default windowed size for the "Toggle Fullscreen"
+            # menu option to work correctly.
+            windowWidth = 800  # Default windowed size
+            windowHeight = 600 # Default windowed size
+        else:
+            isFullScreen = False
+            # Parse the resolution string (e.g., "600x600")
+            w, h = selection.split('x')
+            windowWidth = int(w)
+            windowHeight = int(h)
+        
+        # Close the launcher window and continue the script
+        root.destroy()
+
+    # --- Create the main Tkinter window ---
+    root = tk.Tk()
+    root.title("Game Settings")
+
+    # --- Create a variable to hold the single selection ---
+    # We set a default selection
+    selection_var = tk.StringVar(value="800x800") 
+
+    # --- Create the UI elements ---
+    frame = ttk.Frame(root, padding="20")
+    frame.grid(row=0, column=0)
+    
+    ttk.Label(frame, text="Select Display Mode:").grid(row=0, column=0, sticky=tk.W, pady=5)
+    
+    # All display options, including fullscreen
+    display_options = [
+        "600x600", 
+        "800x800", 
+        "1024x768", 
+        "1280x720", 
+        "Start in Fullscreen"
+    ]
+    
+    # Create a radio button for each option
+    for i, option in enumerate(display_options):
+        ttk.Radiobutton(
+            frame, 
+            text=option, 
+            variable=selection_var, 
+            value=option
+        ).grid(row=i+1, column=0, sticky=tk.W, padx=20)
+
+    # Start button (moved down slightly)
+    ttk.Button(frame, text="Start Game", command=start_game).grid(row=len(display_options)+1, column=0, pady=10)
+
+    # --- Center the window and run it ---
+    root.eval('tk::PlaceWindow . center')
+    
+    # This runs the Tkinter window. The script will *pause* here
+    # until the window is destroyed (by clicking the button).
+    root.mainloop()
+
 def main():
+    show_launcher()
+
     glutInit()
 
     global prevTime, mainWin
@@ -680,6 +752,20 @@ def main():
     
     glutInitWindowPosition(0, 0)
     mainWin = glutCreateWindow(b'CS4182')
+
+    # --- CHECK FOR FULLSCREEN ---
+    # If the user checked the fullscreen box in the launcher,
+    # we enter fullscreen mode immediately.
+    if isFullScreen:
+        # We still save the windowed-mode dimensions
+        # so the "Toggle Fullscreen" menu option works correctly.
+        prevWidth = windowWidth
+        prevHeight = windowHeight
+        prevPosX = glutGet(GLUT_WINDOW_X)
+        prevPosY = glutGet(GLUT_WINDOW_Y)
+        glutFullScreen()
+    # ----------------------------
+
     glutDisplayFunc(display)
     glutIdleFunc(idle)#wheel turn
 
