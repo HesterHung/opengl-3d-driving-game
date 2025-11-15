@@ -242,7 +242,13 @@ def display():
 
 def idle():#--------------with more complex display items like turning wheel---
     global tickTime, prevTime, score
-    jeepObj.rotateWheel(-0.1 * tickTime)    
+    
+    # Only rotate wheel if moving
+    if jeepObj.wheelDir == 'fwd':
+        jeepObj.rotateWheel(-0.1 * tickTime)
+    elif jeepObj.wheelDir == 'back':
+        jeepObj.rotateWheel(0.1 * tickTime)
+    
     glutPostRedisplay()
     
     curTime = glutGet(GLUT_ELAPSED_TIME)
@@ -289,34 +295,62 @@ def motionHandle(x,y):
         pastY = nowY 
         nowX = x
         nowY = y
+
         if (nowX - pastX > 0):
-            angle -= 0.25
+            angle -= 0.05 # Adjust sensitivity
         elif (nowX - pastX < 0):
-            angle += 0.25
-        #elif (nowY - pastY > 0): look into looking over and under object...
-            #phi += 1.0
-        #elif (nowX - pastY <0):
-            #phi -= 1.0
-        eyeX = radius * math.sin(angle) 
-        eyeZ = radius * math.cos(angle)
-        #eyeY = radius * math.sin(phi)
+            angle += 0.05
+        
+        if (nowY - pastY > 0): # Mouse moved down
+            phi -= 0.05
+        elif (nowY - pastY < 0): # Mouse moved up
+            phi += 0.05
+
+        # Clamp phi to prevent the camera from flipping over the top or bottom
+        if (phi > math.pi / 2.0 - 0.01):
+            phi = math.pi / 2.0 - 0.01
+        if (phi < -math.pi / 2.0 + 0.01):
+            phi = -math.pi / 2.0 + 0.01
+
+        recalculateEyePos() # Update camera position
+
     if centered == False:
         setView()
     elif centered == True:
         setObjView()
-    #print eyeX, eyeY, eyeZ, nowX, nowY, radius, angle
-    #print "getting handled"
 
 
 
 def specialKeys(keypress, mX, mY):
-    # things to do
-    # this is the function to move the car
-    pass
+    global jeepObj
+    if canStart == False: # Don't allow movement before "GO!"
+        return
+
+    if keypress == GLUT_KEY_UP:
+        jeepObj.move(False, 0.5) # Move forward
+        jeepObj.wheelDir = 'fwd'
+    elif keypress == GLUT_KEY_DOWN:
+        jeepObj.move(False, -0.5) # Move backward
+        jeepObj.wheelDir = 'back'
+    elif keypress == GLUT_KEY_LEFT:
+        jeepObj.move(True, 5.0) # Rotate left (positive angle)
+    elif keypress == GLUT_KEY_RIGHT:
+        jeepObj.move(True, -5.0) # Rotate right (negative angle)
+    
+    glutPostRedisplay()
+
+def specialKeysUp(keypress, mX, mY):
+    global jeepObj
+    
+    # Stop wheel rotation when UP or DOWN key is released
+    if keypress == GLUT_KEY_UP or keypress == GLUT_KEY_DOWN:
+        jeepObj.wheelDir = 'stop'
 
 def myKeyboard(key, mX, mY):
-    global eyeX, eyeY, eyeZ, angle, radius, helpWindow, centered, helpWin, overReason, topView, behindView
-    if key == b"h":
+    global eyeX, eyeY, eyeZ, angle, radius, helpWindow, centered, helpWin, overReason, topView, behindView, phi, jeepObj
+    
+    if key == b'h':
+        # ... (your existing help window logic) ...
         print ("h pushed"+ str(helpWindow))
         winNum = glutGetWindow()
         if helpWindow == False:
@@ -334,6 +368,47 @@ def myKeyboard(key, mX, mY):
             glutHideWindow()
             #glutDestroyWindow(helpWin)
             glutMainLoop()
+
+    # --- Object Controls ---
+    elif key == b' ': # Spacebar
+        jeepObj.wheelDir = 'stop' # Stop the wheels
+    elif key == b'+' or key == b'=':
+        jeepObj.sizeX += 0.1
+        jeepObj.sizeY += 0.1
+        jeepObj.sizeZ += 0.1
+    elif key == b'-' or key == b'_':
+        if jeepObj.sizeX > 0.2: # Add check to prevent negative scale
+            jeepObj.sizeX -= 0.1
+            jeepObj.sizeY -= 0.1
+            jeepObj.sizeZ -= 0.1
+
+    # --- Camera Controls ---
+    elif key == b'z': # Zoom in
+        radius -= 0.5
+        if radius < 1.0: radius = 1.0 # Don't go inside the origin
+        recalculateEyePos()
+    elif key == b'x': # Zoom out
+        radius += 0.5
+        recalculateEyePos()
+    
+    elif key == b't': # Top View
+        topView = not topView
+        behindView = False
+    elif key == b'b': # Behind View
+        behindView = not behindView
+        topView = False
+    elif key == b'c': # Center (Default) View
+        behindView = False
+        topView = False
+        # Reset camera to default
+        eyeX = 0.0
+        eyeY = 2.0
+        eyeZ = 10.0
+        angle = 0.0
+        radius = 10.0
+        phi = 0.0
+
+    setView() # Update the view after a keypress
     # things can do
     # this is the part to set special functions, such as help window.
 
@@ -359,6 +434,13 @@ def dist(pt1, pt2):
     x = pt2[0]
     y = pt2[1]
     return math.sqrt((a-x)**2 + (b-y)**2)
+
+def recalculateEyePos():
+    global eyeX, eyeY, eyeZ, radius, angle, phi
+    # Calculate eye position using spherical coordinates
+    eyeX = radius * math.cos(phi) * math.sin(angle)
+    eyeY = radius * math.sin(phi)
+    eyeZ = radius * math.cos(phi) * math.cos(angle)
 
 def noReshape(newX, newY): #used to ensure program works correctly when resized
     glutReshapeWindow(windowSize,windowSize)
@@ -452,10 +534,37 @@ def overScreen():
 
 def showHelp():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    glColor3f(1.0,0.0,0.0)
+    
+    # Title
+    glColor3f(1.0, 0.0, 0.0)
     drawTextBitmap("Help Guide" , -0.2, 0.85)
-    glColor3f(0.0,0.0,1.0)
-    drawTextBitmap("describe your control strategy." , -1.0, 0.7)
+    
+    # --- Jeep Controls ---
+    glColor3f(0.0, 1.0, 0.0)
+    drawTextBitmap("Jeep Controls:", -0.9, 0.6)
+    glColor3f(1.0, 1.0, 1.0)
+    drawTextBitmap("Up/Down Arrows: Move Forward / Backward", -0.8, 0.5)
+    drawTextBitmap("Left/Right Arrows: Turn Jeep Left / Right", -0.8, 0.4)
+    drawTextBitmap("Spacebar: Stop wheel rotation (Brake)", -0.8, 0.3)
+    drawTextBitmap("'+' / '-': Increase / Decrease Jeep Size", -0.8, 0.2)
+
+    # --- Camera Controls ---
+    glColor3f(0.0, 1.0, 0.0)
+    drawTextBitmap("Camera Controls:", -0.9, 0.0)
+    glColor3f(1.0, 1.0, 1.0)
+    drawTextBitmap("Middle Mouse + Drag: Orbit Camera", -0.8, -0.1)
+    drawTextBitmap("'z' / 'x': Zoom In / Zoom Out", -0.8, -0.2)
+    drawTextBitmap("'t': Toggle Top-Down View", -0.8, -0.3)
+    drawTextBitmap("'b': Toggle Behind-Jeep View", -0.8, -0.4)
+    drawTextBitmap("'c': Reset Camera to Default", -0.8, -0.5)
+
+    # --- Other Controls ---
+    glColor3f(0.0, 1.0, 0.0)
+    drawTextBitmap("Other:", -0.9, -0.7)
+    glColor3f(1.0, 1.0, 1.0)
+    drawTextBitmap("Right Mouse Click: Open Lighting Menu", -0.8, -0.8)
+    drawTextBitmap("'h': Close this Help Window", -0.8, -0.9)
+
     glutSwapBuffers()
 
 #----------------------------------------------texture development-----------
@@ -516,6 +625,7 @@ def main():
     glutMouseFunc(mouseHandle)
     glutMotionFunc(motionHandle)
     glutSpecialFunc(specialKeys)
+    glutSpecialUpFunc(specialKeysUp)
     glutKeyboardFunc(myKeyboard)
     glutReshapeFunc(noReshape)
     # things to do
