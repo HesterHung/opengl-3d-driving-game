@@ -18,6 +18,9 @@ class star:
     sizeZ = 1.0
 
     rotation = 0.0
+
+    speed = 5.0
+    direction = 1
     
     def __init__(self, x, z):
         self.obj = ImportObject.ImportedObject("../objects/star")

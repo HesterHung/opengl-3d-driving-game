@@ -92,11 +92,6 @@ rotSpeed = 90.0  # Degrees per second
 moveSpeed = 10.0 # Units per second
 rotSpeed = 90.0  # Degrees per second
 
-# --- AI Object ---
-aiStar = star.star(-land + 5, 10)
-aiStarSpeed = 5.0 # Units per second
-aiStarDir = 1     # 1 = moving positive X, -1 = moving negative X
-
 #concerned with lighting#########################!!!!!!!!!!!!!!!!##########
 applyLighting = False
 lightMode = 0  # 0: ambient, 1: point, 2: directional, 3: spot
@@ -261,8 +256,6 @@ def display():
     for star in allstars:
         star.draw()
 
-    aiStar.draw()
-
     # if (usedDiamond == False):
     #     diamondObj.draw()
     
@@ -314,22 +307,20 @@ def idle():
             jeepObj.move(True, -rotAmount) # Rotate right (negative)
     
     # --- Handle AI Star Movement (Reacts to Light) ---
-    if lightMode > 0: # Only move if the lights are NOT ambient (lightMode 0)
-        # 1. Calculate frame-independent move amount
-        # We divide by 1000.0 to convert milliseconds (tickTime) to seconds
-        aiMoveAmount = aiStarSpeed * (tickTime / 1000.0)
+    for s in allstars:
+        # 1. Calculate frame-independent move amount for this star
+        moveAmount = s.speed * (tickTime / 1000.0)
         
-        # 2. Update position
-        aiStar.posX += aiMoveAmount * aiStarDir
+        # 2. Update this star's position
+        s.posX += moveAmount * s.direction
         
-        # 3. Check for patrol bounds and reverse direction
-        #    We use 'land' (20) as the patrol limit
-        if aiStar.posX > land - 5:
-            aiStar.posX = land - 5
-            aiStarDir = -1
-        elif aiStar.posX < -land + 5:
-            aiStar.posX = -land + 5
-            aiStarDir = 1
+        # 3. Check patrol bounds and reverse this star's direction
+        if s.posX > land - 5:
+            s.posX = land - 5
+            s.direction = -1
+        elif s.posX < -land + 5:
+            s.posX = -land + 5
+            s.direction = 1
 
     # --- Handle Wheel Spinning ---
     if jeepObj.wheelDir == 'fwd':
@@ -628,6 +619,10 @@ def addStar(x,z):
     new_star = star.star(x,z)
     
     new_star.posY = 2.0 
+
+    new_star.speed = random.uniform(3.0, 7.0) 
+    new_star.direction = random.choice([1, -1])
+    # -----------------------
     
     allstars.append(new_star)
     rewardCoord.append((x,z))
@@ -928,6 +923,10 @@ def main():
     for i in range(coneAmount):#create cones randomly for obstacles, making sure to give a little lag time in beginning by adding 10.0 buffer
         addCone(random.randint(-land, land), random.randint(10.0, land*gameEnlarge))
 
+    # Add the original "aiStar" to the allstars list
+    addStar(-land + 5, 10) 
+    
+    # Create the other random stars
     for i in range(starAmount):#create stars randomly for rewards
         addStar(random.randint(-land, land), random.randint(10.0, land*gameEnlarge))
 
@@ -936,8 +935,6 @@ def main():
 
     for star in allstars:
         star.makeDisplayLists()
-
-    aiStar.makeDisplayLists()
     
     # diamondObj.makeDisplayLists()
     
