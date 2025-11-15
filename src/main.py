@@ -53,6 +53,7 @@ behindView = False
 #concerned with panning
 nowX = 0.0
 nowY = 0.0
+mouseSensitivity = 0.04
 
 angle = 0.0
 radius = 10.0
@@ -316,14 +317,14 @@ def motionHandle(x,y):
         nowY = y
 
         if (nowX - pastX > 0):
-            angle -= 0.05 # Adjust sensitivity
+            angle -= mouseSensitivity # Adjust sensitivity
         elif (nowX - pastX < 0):
-            angle += 0.05
+            angle += mouseSensitivity
         
         if (nowY - pastY > 0): # Mouse moved down
-            phi -= 0.05
+            phi += mouseSensitivity # <-- MODIFIED LINE
         elif (nowY - pastY < 0): # Mouse moved up
-            phi += 0.05
+            phi -= mouseSensitivity # <-- MODIFIED LINE
 
         # Clamp phi to prevent the camera from flipping over the top or bottom
         if (phi > math.pi / 2.0 - 0.01):
