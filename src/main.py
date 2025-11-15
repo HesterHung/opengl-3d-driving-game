@@ -357,7 +357,9 @@ def setView():
                   center_x, center_y, center_z, 
                   0, 1, 0)                   
     else:
-        gluLookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0)
+        gluLookAt(eyeX, eyeY, eyeZ,                     # Eye (calculated relative to jeep)
+                    jeepObj.posX, jeepObj.posY, jeepObj.posZ, # Center (the jeep itself)
+                    0, 1, 0)
     
     glutPostRedisplay()
 
@@ -493,6 +495,8 @@ def myKeyboard(key, mX, mY):
         radius = 10.0
         phi = 0.0
 
+        recalculateEyePos()
+
     setView() # Update the view after a keypress
     # things can do
     # this is the part to set special functions, such as help window.
@@ -559,10 +563,16 @@ def dist(pt1, pt2):
 
 def recalculateEyePos():
     global eyeX, eyeY, eyeZ, radius, angle, phi
-    # Calculate eye position using spherical coordinates
-    eyeX = radius * math.cos(phi) * math.sin(angle)
-    eyeY = radius * math.sin(phi)
-    eyeZ = radius * math.cos(phi) * math.cos(angle)
+
+    # 1. Calculate the *offset* from the center point
+    offsetX = radius * math.cos(phi) * math.sin(angle)
+    offsetY = radius * math.sin(phi)
+    offsetZ = radius * math.cos(phi) * math.cos(angle)
+    
+    # 2. Add that offset to the jeep's current position
+    eyeX = jeepObj.posX + offsetX
+    eyeY = jeepObj.posY + offsetY
+    eyeZ = jeepObj.posZ + offsetZ
 
 def reshape(w, h):
     global windowWidth, windowHeight
