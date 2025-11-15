@@ -7,7 +7,13 @@ import ImportObject
 import PIL.Image as Image
 import jeep, cone, star
 
-windowSize = 600
+# windowSize = 600
+windowWidth = 600
+windowHeight = 600
+isFullScreen = False
+prevWidth, prevHeight = windowWidth, windowHeight
+prevPosX, prevPosY = 0, 0
+
 helpWindow = False
 helpWin = 0
 mainWin = 0
@@ -260,10 +266,20 @@ def idle():#--------------with more complex display items like turning wheel---
 
 #---------------------------------setting camera----------------------------
 def setView():
-    global eyeX, eyeY, eyeZ
+    global eyeX, eyeY, eyeZ, windowWidth, windowHeight # Add windowWidth/Height here
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    gluPerspective(90, 1, 0.1, 100)
+
+    # Add this check to prevent division by zero
+    if windowHeight == 0:
+        windowHeight = 1
+    
+    # Calculate the correct aspect ratio
+    aspect = float(windowWidth) / float(windowHeight)
+
+    # Replace '1' with 'aspect' in gluPerspective
+    gluPerspective(90, aspect, 0.1, 100) # <-- MODIFIED LINE
+
     if (topView == True):
         gluLookAt(0, 10, land*gameEnlarge/2, 0, jeepObj.posY, land*gameEnlarge/2, 0, 1, 0)
     elif (behindView ==True):
@@ -272,7 +288,7 @@ def setView():
         gluLookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0)
     glMatrixMode(GL_MODELVIEW)
     
-    glutPostRedisplay()    
+    glutPostRedisplay()
 
 def setObjView():
     # things to do
@@ -414,8 +430,45 @@ def myKeyboard(key, mX, mY):
     # this is the part to set special functions, such as help window.
 
 def menuFunc(value):
-    global lightMode
-    lightMode = value
+    global lightMode, isFullScreen, windowWidth, windowHeight
+    global prevWidth, prevHeight, prevPosX, prevPosY
+
+    if 0 <= value <= 3: # Lighting options
+        print(f"Lighting mode set to: {value}")
+        lightMode = value
+    
+    # --- Resolution Options ---
+    elif value == 101: # 600x600
+        if not isFullScreen:
+            glutReshapeWindow(600, 600)
+    
+    elif value == 102: # 800x800
+        if not isFullScreen:
+            glutReshapeWindow(800, 800)
+
+    elif value == 103: # 1024x768
+        if not isFullScreen:
+            glutReshapeWindow(1024, 768)
+
+    # --- Fullscreen Toggle ---
+    elif value == 200:
+        if not isFullScreen:
+            # Save current window state
+            prevWidth = windowWidth
+            prevHeight = windowHeight
+            prevPosX = glutGet(GLUT_WINDOW_X)
+            prevPosY = glutGet(GLUT_WINDOW_Y)
+            
+            # Go fullscreen
+            glutFullScreen()
+            isFullScreen = True
+        else:
+            # Restore previous window state
+            glutReshapeWindow(prevWidth, prevHeight)
+            glutPositionWindow(prevPosX, prevPosY)
+            isFullScreen = False
+
+    glutPostRedisplay()
     return 0
 
 #-------------------------------------------------tools----------------------       
@@ -443,8 +496,19 @@ def recalculateEyePos():
     eyeY = radius * math.sin(phi)
     eyeZ = radius * math.cos(phi) * math.cos(angle)
 
-def noReshape(newX, newY): #used to ensure program works correctly when resized
-    glutReshapeWindow(windowSize,windowSize)
+def reshape(w, h):
+    global windowWidth, windowHeight
+    
+    # Store new dimensions
+    windowWidth = w
+    windowHeight = h
+    
+    # Set the viewport to cover the new window
+    glViewport(0, 0, w, h)
+    
+    # Since the projection matrix depends on the aspect ratio,
+    # we need to update it. The easiest way is to call setView().
+    setView()
 
 #--------------------------------------------making game more complex--------
 def addCone(x,z):
@@ -489,7 +553,7 @@ def gameOver():
     #recordGame() #add to excel
     glutHideWindow()
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
-    glutInitWindowSize(200,200)
+    glutInitWindowSize(windowWidth, windowHeight)
     glutInitWindowPosition(600,100)
     overWin = glutCreateWindow("Game Over!")
     glutDisplayFunc(overScreen)
@@ -612,7 +676,7 @@ def main():
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
     # things to do
     # change the window resolution in the game
-    glutInitWindowSize(windowSize, windowSize)
+    glutInitWindowSize(windowWidth, windowHeight)
     
     glutInitWindowPosition(0, 0)
     mainWin = glutCreateWindow(b'CS4182')
@@ -628,15 +692,30 @@ def main():
     glutSpecialFunc(specialKeys)
     glutSpecialUpFunc(specialKeysUp)
     glutKeyboardFunc(myKeyboard)
-    glutReshapeFunc(noReshape)
+    glutReshapeFunc(reshape)
     # things to do
     # add a menu 
 
-    glutCreateMenu(menuFunc)
+    # Create a sub-menu for lighting
+    lightMenu = glutCreateMenu(menuFunc)
     glutAddMenuEntry("Ambient Light", 0)
     glutAddMenuEntry("Point Light", 1)
     glutAddMenuEntry("Directional Light", 2)
     glutAddMenuEntry("Spotlight", 3)
+
+    # Create a sub-menu for resolution
+    resMenu = glutCreateMenu(menuFunc)
+    glutAddMenuEntry("600 x 600", 101)
+    glutAddMenuEntry("800 x 800", 102)
+    glutAddMenuEntry("1024 x 768", 103)
+
+    # Create the main menu
+    glutCreateMenu(menuFunc)
+    glutAddSubMenu("Lighting", lightMenu)
+    glutAddSubMenu("Resolution", resMenu)
+    glutAddMenuEntry("Toggle Fullscreen", 200) # Add toggle option
+
+    # Attach the main menu to the right mouse button
     glutAttachMenu(GLUT_RIGHT_BUTTON)
 
     loadSceneTextures()
