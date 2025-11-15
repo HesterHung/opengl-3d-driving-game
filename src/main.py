@@ -76,6 +76,18 @@ obstacleCoord = []
 rewardCoord = []
 ckSense = 5.0
 
+# Dictionary to hold the state of movement keys
+keyState = {
+    'up': False,
+    'down': False,
+    'left': False,
+    'right': False
+}
+
+# Speeds for frame-rate-independent movement
+moveSpeed = 10.0 # Units per second
+rotSpeed = 90.0  # Degrees per second
+
 #concerned with lighting#########################!!!!!!!!!!!!!!!!##########
 applyLighting = False
 lightMode = 0  # 0: ambient, 1: point, 2: directional, 3: spot
@@ -93,7 +105,6 @@ matAmbient = [1.0, 1.0, 1.0, 1.0]
 matDiffuse = [0.5, 0.5, 0.5, 1.0]
 matSpecular = [0.5, 0.5, 0.5, 1.0]
 matShininess  = 100.0
-
 
 
 #--------------------------------------developing scene---------------
@@ -252,21 +263,52 @@ def display():
     #personObj.draw()
     glutSwapBuffers()
 
-def idle():#--------------with more complex display items like turning wheel---
-    global tickTime, prevTime, score
+def idle():
+    global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
     
-    # Only rotate wheel if moving
-    if jeepObj.wheelDir == 'fwd':
-        jeepObj.rotateWheel(-0.1 * tickTime)
-    elif jeepObj.wheelDir == 'back':
-        jeepObj.rotateWheel(0.1 * tickTime)
-    
-    glutPostRedisplay()
-    
+    # --- Handle Time and Score ---
+    # (Do this first to get an accurate tickTime)
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
     prevTime = curTime
     score = curTime/1000
+
+    if tickTime == 0: # Avoid issues if frame is too fast
+        glutPostRedisplay()
+        return
+
+    # --- Handle Movement Logic ---
+    if canStart:
+        # 1. Calculate frame-independent movement/rotation amounts
+        moveAmount = moveSpeed * (tickTime / 1000.0)
+        rotAmount = rotSpeed * (tickTime / 1000.0)
+
+        # 2. Handle Forward/Backward Movement
+        #    This 'if' runs independently of the rotation check
+        if keyState['up']:
+            jeepObj.move(False, moveAmount) # Move forward
+            jeepObj.wheelDir = 'fwd'
+        elif keyState['down']:
+            jeepObj.move(False, -moveAmount) # Move backward
+            jeepObj.wheelDir = 'back'
+        else:
+            jeepObj.wheelDir = 'stop'
+
+        # 3. Handle Rotation
+        #    This 'if' also runs independently
+        if keyState['left']:
+            jeepObj.move(True, rotAmount) # Rotate left (positive)
+        elif keyState['right']:
+            jeepObj.move(True, -rotAmount) # Rotate right (negative)
+    
+    # --- Handle Wheel Spinning ---
+    if jeepObj.wheelDir == 'fwd':
+        jeepObj.rotateWheel(-0.1 * tickTime) # Keep original spin speed
+    elif jeepObj.wheelDir == 'back':
+        jeepObj.rotateWheel(0.1 * tickTime)
+    
+    # --- Redraw ---
+    glutPostRedisplay()
     
 
 #---------------------------------setting camera----------------------------
@@ -300,7 +342,7 @@ def setView():
                         0.0, 0.0, 1.0)
     elif (behindView ==True):
         behind_dist = 10.0  
-        above_dist = 2.0   
+        above_dist = 8.0   
         
         rad_angle = math.radians(jeepObj.rotation)
         eye_x = jeepObj.posX - behind_dist * math.sin(rad_angle)
@@ -368,29 +410,26 @@ def motionHandle(x,y):
 
 
 def specialKeys(keypress, mX, mY):
-    global jeepObj
-    if canStart == False: # Don't allow movement before "GO!"
-        return
-
+    global keyState
     if keypress == GLUT_KEY_UP:
-        jeepObj.move(False, 0.5) # Move forward
-        jeepObj.wheelDir = 'fwd'
+        keyState['up'] = True
     elif keypress == GLUT_KEY_DOWN:
-        jeepObj.move(False, -0.5) # Move backward
-        jeepObj.wheelDir = 'back'
+        keyState['down'] = True
     elif keypress == GLUT_KEY_LEFT:
-        jeepObj.move(True, 5.0) # Rotate left (positive angle)
+        keyState['left'] = True
     elif keypress == GLUT_KEY_RIGHT:
-        jeepObj.move(True, -5.0) # Rotate right (negative angle)
-    
-    glutPostRedisplay()
+        keyState['right'] = True
 
 def specialKeysUp(keypress, mX, mY):
-    global jeepObj
-    
-    # Stop wheel rotation when UP or DOWN key is released
-    if keypress == GLUT_KEY_UP or keypress == GLUT_KEY_DOWN:
-        jeepObj.wheelDir = 'stop'
+    global keyState
+    if keypress == GLUT_KEY_UP:
+        keyState['up'] = False
+    elif keypress == GLUT_KEY_DOWN:
+        keyState['down'] = False
+    elif keypress == GLUT_KEY_LEFT:
+        keyState['left'] = False
+    elif keypress == GLUT_KEY_RIGHT:
+        keyState['right'] = False
 
 def myKeyboard(key, mX, mY):
     global eyeX, eyeY, eyeZ, angle, radius, helpWindow, centered, helpWin, overReason, topView, behindView, phi, jeepObj
