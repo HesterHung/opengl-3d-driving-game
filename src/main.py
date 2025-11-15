@@ -154,6 +154,8 @@ def display():
     global jeepObj, canStart, score, beginTime, countTime
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
+    setView()
+
     if lightMode == 0:  # Ambient light
         glDisable(GL_LIGHTING)
     else:
@@ -297,7 +299,7 @@ def setView():
                         jeepObj.posX, jeepObj.posY, jeepObj.posZ,   # Center is the jeep itself
                         0.0, 0.0, 1.0)
     elif (behindView ==True):
-        behind_dist = 4.0  
+        behind_dist = 10.0  
         above_dist = 2.0   
         
         rad_angle = math.radians(jeepObj.rotation)
