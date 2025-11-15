@@ -88,6 +88,15 @@ keyState = {
 moveSpeed = 10.0 # Units per second
 rotSpeed = 90.0  # Degrees per second
 
+# Speeds for frame-rate-independent movement
+moveSpeed = 10.0 # Units per second
+rotSpeed = 90.0  # Degrees per second
+
+# --- AI Object ---
+aiStar = star.star(-land + 5, 10)
+aiStarSpeed = 5.0 # Units per second
+aiStarDir = 1     # 1 = moving positive X, -1 = moving negative X
+
 #concerned with lighting#########################!!!!!!!!!!!!!!!!##########
 applyLighting = False
 lightMode = 0  # 0: ambient, 1: point, 2: directional, 3: spot
@@ -252,6 +261,8 @@ def display():
     for star in allstars:
         star.draw()
 
+    aiStar.draw()
+
     # if (usedDiamond == False):
     #     diamondObj.draw()
     
@@ -265,7 +276,8 @@ def display():
 
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
-    
+    global aiStar, aiStarSpeed, aiStarDir, lightMode
+
     # --- Handle Time and Score ---
     # (Do this first to get an accurate tickTime)
     curTime = glutGet(GLUT_ELAPSED_TIME)
@@ -301,6 +313,24 @@ def idle():
         elif keyState['right']:
             jeepObj.move(True, -rotAmount) # Rotate right (negative)
     
+    # --- Handle AI Star Movement (Reacts to Light) ---
+    if lightMode > 0: # Only move if the lights are NOT ambient (lightMode 0)
+        # 1. Calculate frame-independent move amount
+        # We divide by 1000.0 to convert milliseconds (tickTime) to seconds
+        aiMoveAmount = aiStarSpeed * (tickTime / 1000.0)
+        
+        # 2. Update position
+        aiStar.posX += aiMoveAmount * aiStarDir
+        
+        # 3. Check for patrol bounds and reverse direction
+        #    We use 'land' (20) as the patrol limit
+        if aiStar.posX > land - 5:
+            aiStar.posX = land - 5
+            aiStarDir = -1
+        elif aiStar.posX < -land + 5:
+            aiStar.posX = -land + 5
+            aiStarDir = 1
+
     # --- Handle Wheel Spinning ---
     if jeepObj.wheelDir == 'fwd':
         jeepObj.rotateWheel(-0.1 * tickTime) # Keep original spin speed
@@ -594,7 +624,12 @@ def addCone(x,z):
     obstacleCoord.append((x,z))
 
 def addStar(x,z):
-    allstars.append(star.star(x,z))
+    # Create the star object first
+    new_star = star.star(x,z)
+    
+    new_star.posY = 2.0 
+    
+    allstars.append(new_star)
     rewardCoord.append((x,z))
 
 def collisionCheck():
@@ -684,29 +719,30 @@ def showHelp():
     
     # --- Jeep Controls ---
     glColor3f(0.0, 1.0, 0.0)
-    drawTextBitmap("Jeep Controls:", -0.9, 0.6)
+    drawTextBitmap("Jeep Controls:", -0.9, 0.7) 
     glColor3f(1.0, 1.0, 1.0)
-    drawTextBitmap("Up/Down Arrows: Move Forward / Backward", -0.8, 0.5)
-    drawTextBitmap("Left/Right Arrows: Turn Jeep Left / Right", -0.8, 0.4)
-    drawTextBitmap("Spacebar: Stop wheel rotation (Brake)", -0.8, 0.3)
-    drawTextBitmap("'+' / '-': Increase / Decrease Jeep Size", -0.8, 0.2)
+    drawTextBitmap("Up/Down Arrows: Move Forward / Backward", -0.8, 0.6)
+    drawTextBitmap("Left/Right Arrows: Turn Jeep Left / Right", -0.8, 0.5)
+    drawTextBitmap("Spacebar: Stop wheel rotation (Brake)", -0.8, 0.4)
+    drawTextBitmap("'+' / '-': Increase / Decrease Jeep Size", -0.8, 0.3)
 
     # --- Camera Controls ---
     glColor3f(0.0, 1.0, 0.0)
-    drawTextBitmap("Camera Controls:", -0.9, 0.0)
+    drawTextBitmap("Camera Controls:", -0.9, 0.1)
     glColor3f(1.0, 1.0, 1.0)
-    drawTextBitmap("Middle Mouse + Drag: Orbit Camera", -0.8, -0.1)
-    drawTextBitmap("'z' / 'x': Zoom In / Zoom Out", -0.8, -0.2)
-    drawTextBitmap("'t': Toggle Top-Down View", -0.8, -0.3)
-    drawTextBitmap("'b': Toggle Behind-Jeep View", -0.8, -0.4)
-    drawTextBitmap("'c': Reset Camera to Default", -0.8, -0.5)
+    drawTextBitmap("Middle Mouse + Drag: Orbit Camera", -0.8, 0.0)
+    drawTextBitmap("'z' / 'x': Zoom In / Zoom Out", -0.8, -0.1)
+    drawTextBitmap("'t': Toggle Top-Down View", -0.8, -0.2)
+    drawTextBitmap("'b': Toggle Behind-Jeep View", -0.8, -0.3)
+    drawTextBitmap("'c': Reset Camera to Default (orbits jeep)", -0.8, -0.4) 
 
     # --- Other Controls ---
     glColor3f(0.0, 1.0, 0.0)
-    drawTextBitmap("Other:", -0.9, -0.7)
+    drawTextBitmap("Other:", -0.9, -0.6)
     glColor3f(1.0, 1.0, 1.0)
-    drawTextBitmap("Right Mouse Click: Open Lighting Menu", -0.8, -0.8)
-    drawTextBitmap("'h': Close this Help Window", -0.8, -0.9)
+    drawTextBitmap("'h': Close this Help Window", -0.8, -0.7)
+    drawTextBitmap("Right Mouse Click: Open Main Menu", -0.8, -0.8)
+    drawTextBitmap("  -> Lighting, Resolution, Fullscreen", -0.7, -0.9) 
 
     glutSwapBuffers()
 
@@ -901,7 +937,7 @@ def main():
     for star in allstars:
         star.makeDisplayLists()
 
-
+    aiStar.makeDisplayLists()
     
     # diamondObj.makeDisplayLists()
     
