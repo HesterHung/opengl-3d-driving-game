@@ -87,50 +87,63 @@ class jeep:
         
     
     def draw(self):
-        glPushMatrix()
+        glPushMatrix() # This is the start of the master transform
         
+        # Apply master transforms
         glTranslatef(self.posX,self.posY,self.posZ)
         glRotatef(self.rotation,0.0,1.0,0.0)
         glScalef(self.sizeX,self.sizeY,self.sizeZ)
 
+        # Draw the body
         glCallList(self.displayList)
-        glPopMatrix()
+        
+        # We do NOT call glPopMatrix() here
 
     def drawW1(self):
-        glPushMatrix()
-
-        glTranslatef(self.posX, self.posY-1.3146, self.posZ)
-        glRotatef(self.rotation,0.0,1.0,0.0)
-        glTranslatef(0.0, self.posY-1.3146, 2.9845)
-        glScalef(self.sizeX, self.sizeY, self.sizeZ)
+        # The master transform (pos, rot, scale) is ALREADY active
+        glPushMatrix() # Save the master transform state
         
+        # 1. Translate to the wheel's *rotation axis*
+        #    (relative to the jeep's origin)
+        glTranslatef(0.0, -1.3146, 2.9845)
+        
+        # 2. Apply the wheel spin rotation
         if self.wheelDir == 'fwd': 
             glRotatef(self.revWheelTurn,1.0,0.0,0.0)
         elif self.wheelDir == 'back':
             glRotatef(self.wheelTurn,1.0,0.0,0.0)
     
-        glTranslatef(0.0,1.3146,-2.9845)
+        # 3. Apply the original code's "hack" translation to
+        #    move from the rotation axis to the model's origin.
+        glTranslatef(0.0, 1.3146, -2.9845)
         
+        # 4. Draw the wheel
         glCallList(self.wheel1DL)
-        glPopMatrix()
+        
+        glPopMatrix() # Restore back to the master transform
 
     def drawW2(self):
-        glPushMatrix()
+        # The master transform (pos, rot, scale) is ALREADY active
+        glPushMatrix() # Save the master transform state
         
-        glTranslatef(self.posX, self.posY-1.3146, self.posZ)
-        glRotatef(self.rotation,0.0,1.0,0.0)
-        glTranslatef(0.0, self.posY-1.3146, -2.9845)
-        glScalef(self.sizeX, self.sizeY, self.sizeZ)
+        # 1. Translate to the wheel's *rotation axis*
+        #    (relative to the jeep's origin)
+        glTranslatef(0.0, -1.3146, -2.9845) # Note the negative Z
         
+        # 2. Apply the wheel spin rotation
         if self.wheelDir == 'fwd': 
             glRotatef(self.revWheelTurn,1.0,0.0,0.0)
         elif self.wheelDir == 'back':
             glRotatef(self.wheelTurn,1.0,0.0,0.0)
     
-        glTranslatef(0.0,1.3146,3.3)
-
+        # 3. Apply the original code's "offset" translation
+        #    (using the original 3.3 value)
+        glTranslatef(0.0, 1.3146, 3.3)
+        
+        # 4. Draw the wheel
         glCallList(self.wheel2DL)
-        glPopMatrix()
+        
+        glPopMatrix() # Restore back to the master transform
 
     def rotateWheel(self, newTheta):
         global wheelTurn
@@ -139,18 +152,13 @@ class jeep:
         self.revWheelTurn = 360 - self.wheelTurn
 
     def drawLight(self):
-        glPushMatrix()
-
-        glTranslatef(self.posX, self.posY, self.posZ)
-        glRotatef(self.rotation,0.0,1.0,0.0)
-        glScalef(self.sizeX, self.sizeY, self.sizeZ)
-
+        # The master transform (pos, rot, scale) is ALREADY active
+        # These lights are drawn relative to the jeep's origin
+        
         if self.lightOn == True:
             glCallList(self.litDL)
         elif self.lightOn == False:
             glCallList(self.dimDL)
-
-        glPopMatrix()
   
     def move(self, rot, val): 
         if rot == False: 

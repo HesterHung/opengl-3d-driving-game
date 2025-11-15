@@ -237,6 +237,7 @@ def display():
     jeepObj.drawW1()
     jeepObj.drawW2()
     jeepObj.drawLight()
+    glPopMatrix()
     #personObj.draw()
     glutSwapBuffers()
 
