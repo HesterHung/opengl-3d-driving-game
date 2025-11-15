@@ -27,7 +27,7 @@ class jeep:
     wheelDir = 'stop'
     
     posX = 0.0
-    posY = 1.75
+    posY = 2.45
     posZ = 0.0
 
 ##    wheel1LocX =0 
@@ -89,12 +89,19 @@ class jeep:
     def draw(self):
         glPushMatrix() # This is the start of the master transform
         
-        # Apply master transforms
-        glTranslatef(self.posX,self.posY,self.posZ)
-        glRotatef(self.rotation,0.0,1.0,0.0)
-        glScalef(self.sizeX,self.sizeY,self.sizeZ)
+        # 1. Move to the jeep's (x,z) position on the ground plane
+        glTranslatef(self.posX, 0.0, self.posZ) 
+        
+        # 2. Rotate the jeep on the ground
+        glRotatef(self.rotation, 0.0, 1.0, 0.0)
+        
+        # 3. Scale the *entire* jeep coordinate system from the ground
+        glScalef(self.sizeX, self.sizeY, self.sizeZ)
+        
+        # 4. Now, lift the scaled jeep up to its body origin height
+        glTranslatef(0.0, self.posY, 0.0)
 
-        # Draw the body
+        # 5. Draw the body
         glCallList(self.displayList)
         
         # We do NOT call glPopMatrix() here
