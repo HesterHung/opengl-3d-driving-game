@@ -5,7 +5,7 @@ from OpenGL.GLU import *
 import math, time, random, csv, datetime
 import ImportObject
 import PIL.Image as Image
-import jeep, cone, star
+import jeep, cone, star, ribbon
 import tkinter as tk            
 from tkinter import ttk          
 
@@ -88,9 +88,17 @@ keyState = {
 moveSpeed = 10.0 # Units per second
 rotSpeed = 90.0  # Degrees per second
 
-# Speeds for frame-rate-independent movement
-moveSpeed = 10.0 # Units per second
-rotSpeed = 90.0  # Degrees per second
+# --- Store base speeds and define boost speeds ---
+NORMAL_SPEED = moveSpeed
+NORMAL_ROT_SPEED = rotSpeed
+BOOST_SPEED = 25.0
+BOOST_ROT_SPEED = 120.0 # Make turning a bit faster too
+
+# --- NEW: Create the ribbon object ---
+# We pass it the Z position, its length, and the width of the road (`land`)
+ribbonObj = ribbon.ribbon(z_pos=50.0, length=5.0, width=land)
+# ---------------------------------------------------
+
 
 #concerned with lighting#########################!!!!!!!!!!!!!!!!##########
 applyLighting = False
@@ -250,6 +258,18 @@ def display():
 
     for obj in objectArray:
         obj.draw()
+
+    # --- NEW: Draw the Boost Ribbon ---
+    # Disable lighting so it's always bright
+    glDisable(GL_LIGHTING) 
+    
+    ribbonObj.draw() # <--- CALL THE OBJECT'S DRAW METHOD
+    
+    # Re-enable lighting if it was supposed to be on
+    if lightMode != 0:
+        glEnable(GL_LIGHTING)
+    # --- End Boost Ribbon ---
+
     for cone in allcones:
         cone.draw()
 
@@ -270,9 +290,9 @@ def display():
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
     global aiStar, aiStarSpeed, aiStarDir, lightMode
+    # (No ribbon globals needed here anymore)
 
     # --- Handle Time and Score ---
-    # (Do this first to get an accurate tickTime)
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
     prevTime = curTime
@@ -282,14 +302,33 @@ def idle():
         glutPostRedisplay()
         return
 
+    # --- NEW: Handle Boost Logic ---
+    seconds_passed = tickTime / 1000.0
+    
+    # Call the ribbon's update method
+    # It needs the time delta and the jeep's Z position
+    boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ)
+    
+    # React to the returned state changes
+    if boost_on:
+        moveSpeed = BOOST_SPEED
+        rotSpeed = BOOST_ROT_SPEED
+        # print("Boost ON!") # Optional: for debugging
+    elif boost_off:
+        moveSpeed = NORMAL_SPEED
+        rotSpeed = NORMAL_ROT_SPEED
+        # print("Boost OFF!") # Optional: for debugging
+    # --- End Boost Logic ---
+
+
     # --- Handle Movement Logic ---
     if canStart:
         # 1. Calculate frame-independent movement/rotation amounts
-        moveAmount = moveSpeed * (tickTime / 1000.0)
-        rotAmount = rotSpeed * (tickTime / 1000.0)
+        #    (These now use moveSpeed/rotSpeed, which might be boosted)
+        moveAmount = moveSpeed * seconds_passed
+        rotAmount = rotSpeed * seconds_passed
 
         # 2. Handle Forward/Backward Movement
-        #    This 'if' runs independently of the rotation check
         if keyState['up']:
             jeepObj.move(False, moveAmount) # Move forward
             jeepObj.wheelDir = 'fwd'
@@ -300,7 +339,6 @@ def idle():
             jeepObj.wheelDir = 'stop'
 
         # 3. Handle Rotation
-        #    This 'if' also runs independently
         if keyState['left']:
             jeepObj.move(True, rotAmount) # Rotate left (positive)
         elif keyState['right']:
@@ -310,7 +348,7 @@ def idle():
     if lightMode > 0:
         for s in allstars:
             # 1. Calculate frame-independent move amount for this star
-            moveAmount = s.speed * (tickTime / 1000.0)
+            moveAmount = s.speed * seconds_passed
             
             # 2. Update this star's position
             s.posX += moveAmount * s.direction
@@ -352,12 +390,10 @@ def setView():
     gluPerspective(90, aspect, 0.1, 100)
 
     # --- 2. Set the MODELVIEW Matrix ---
-    # Switch to MODELVIEW mode *before* setting the camera
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity() # Reset the MODELVIEW matrix
 
     # --- 3. Set the Camera (View) ---
-    # Now, all gluLookAt calls will correctly affect the MODELVIEW matrix
     if (topView == True):
         gluLookAt(jeepObj.posX, 20.0, jeepObj.posZ,   # Eye is 20 units *above* the jeep
                         jeepObj.posX, jeepObj.posY, jeepObj.posZ,   # Center is the jeep itself
@@ -638,10 +674,10 @@ def collisionCheck():
         overReason = "You ran off the road!"
         gameOver()
 
-    if (dist((jeepObj.posX, jeepObj.posZ), (diamondObj.posX, diamondObj.posZ)) <= ckSense and usedDiamond ==False):
-        print ("Diamond bonus!")
-        countTime /= 2
-        usedDiamond = True
+    # if (dist((jeepObj.posX, jeepObj.posZ), (diamondObj.posX, diamondObj.posZ)) <= ckSense and usedDiamond ==False):
+    #     print ("Diamond bonus!")
+    #     countTime /= 2
+    #     usedDiamond = True
     if (jeepObj.posZ >= land*gameEnlarge):
         gameSuccess()
         
@@ -948,4 +984,3 @@ def main():
 
     
 main()
-
