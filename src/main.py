@@ -307,20 +307,21 @@ def idle():
             jeepObj.move(True, -rotAmount) # Rotate right (negative)
     
     # --- Handle AI Star Movement (Reacts to Light) ---
-    for s in allstars:
-        # 1. Calculate frame-independent move amount for this star
-        moveAmount = s.speed * (tickTime / 1000.0)
-        
-        # 2. Update this star's position
-        s.posX += moveAmount * s.direction
-        
-        # 3. Check patrol bounds and reverse this star's direction
-        if s.posX > land - 5:
-            s.posX = land - 5
-            s.direction = -1
-        elif s.posX < -land + 5:
-            s.posX = -land + 5
-            s.direction = 1
+    if lightMode > 0:
+        for s in allstars:
+            # 1. Calculate frame-independent move amount for this star
+            moveAmount = s.speed * (tickTime / 1000.0)
+            
+            # 2. Update this star's position
+            s.posX += moveAmount * s.direction
+            
+            # 3. Check patrol bounds and reverse this star's direction
+            if s.posX > land - 5:
+                s.posX = land - 5
+                s.direction = -1
+            elif s.posX < -land + 5:
+                s.posX = -land + 5
+                s.direction = 1
 
     # --- Handle Wheel Spinning ---
     if jeepObj.wheelDir == 'fwd':
