@@ -109,7 +109,7 @@ ribbonObj = ribbon.ribbon(z_pos=50.0, length=5.0, width=land)
 tunnelObj = NurbsLoader.NurbsModel(
     0.0, 0.0, 100.0, 
     "../nurbs/tunnel.txt", 
-    scale=(2.5, 2.5, 2.5), 
+    scale=(2.5, 3.5, 2.5), 
     color=(0.4, 0.4, 0.4)
 )
 
@@ -432,6 +432,45 @@ def display():
         tunnelObj.draw()
 
         glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.0, 0.0, 0.0, 1.0])
+
+        light_distances = []
+        for sl in allstreetlights:
+            # Simple distance formula (Z-axis is the most important here)
+            dist = abs(sl.posZ - jeepObj.posZ)
+            light_distances.append((dist, sl))
+
+        # 2. Sort the list so the closest lights are first
+        light_distances.sort(key=lambda x: x[0])
+
+        # 3. The available OpenGL Light IDs
+        available_ids = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
+
+        # 4. Assign IDs to the closest ones, set None for far ones
+        for i, (dist, sl) in enumerate(light_distances):
+            if i < len(available_ids):
+                # This light is close! Turn it on.
+                sl.lightID = available_ids[i]
+                
+                # Optional: Fade out lights that are getting far away but still "active"
+                # to prevent "popping" (Requires advanced attenuation tweaking, skipping for now)
+            else:
+                # This light is too far/low priority. Turn it off.
+                sl.lightID = None
+                # Ensure the light source itself is disabled in OpenGL
+                # (We don't know which ID it *used* to have, so we rely on the 
+                # next frame's closest light to overwrite the GL_LIGHTx setting)
+
+            sl.draw()
+            
+            # IMPORTANT: If a light was just drawn with an ID (e.g. LIGHT2), 
+            # we need to ensure LIGHT2 is turned OFF if it isn't used in the next frame.
+            # However, since we re-enable IDs every frame for the closest ones, 
+            # we just need to be careful about 'ghost' lights.
+            # A safer way is to disable all streetlights first:
+        
+        # (Put this BEFORE the loop above if you see flickering artifacts)
+        for i in available_ids:
+            glDisable(i)
 
         for sl in allstreetlights: sl.draw()
         for cone in allcones: cone.draw()
@@ -937,26 +976,14 @@ def setupStreetLights():
     
     # Create lights along the road (z-axis)
     # Start from z=0 and go up to the end of the land
-    for z_pos in range(0, int(land * gameEnlarge), 40): # Every 40 units
+    for z_pos in range(0, int(land * gameEnlarge), 40): 
         
-        # Assign a real light ID if we have any left
-        current_id = None
-        if light_idx < len(available_lights):
-            current_id = available_lights[light_idx]
-            light_idx += 1
-            
         # Left Side Light
-        sl_left = streetlight.StreetLight(-land + 1.5, z_pos, current_id)
+        sl_left = streetlight.StreetLight(-land + 2, z_pos, None)
         allstreetlights.append(sl_left)
 
-        # Assign next ID for right side if available
-        current_id = None
-        if light_idx < len(available_lights):
-            current_id = available_lights[light_idx]
-            light_idx += 1
-
         # Right Side Light
-        sl_right = streetlight.StreetLight(land - 1.5, z_pos, current_id)
+        sl_right = streetlight.StreetLight(land - 2, z_pos, None)
         allstreetlights.append(sl_right)
     
 #-----------------------------------------------lighting work--------------
