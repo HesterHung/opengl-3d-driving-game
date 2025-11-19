@@ -5,7 +5,7 @@ from OpenGL.GLU import *
 import math, time, random, csv, datetime
 import ImportObject
 import PIL.Image as Image
-import jeep, cone, star, ribbon, NurbsLoader
+import jeep, cone, star, ribbon, NurbsLoader, streetlight
 import tkinter as tk            
 from tkinter import ttk          
 
@@ -77,6 +77,8 @@ usedDiamond = False
 
 allcones = []
 allstars = []
+allstreetlights = []
+
 obstacleCoord = []
 rewardCoord = []
 ckSense = 5.0
@@ -283,70 +285,73 @@ def display():
     # --- 1. GLOBAL LIGHTING SETUP ---
     if lightMode == 0:  # Ambient light
         glDisable(GL_LIGHTING)
+        glDisable(GL_LIGHT0)
     else:
         glEnable(GL_LIGHTING)
-        
-        # --- MODE SPECIFIC LIGHT POSITION ---
-        if currentMode == MODE_DISPLAY:
-            # == DISPLAY MODE SETTINGS ==
+
+        if lightMode == 4:
+            # === MODE 4 (Default/Dark) ===
+            # 1. Set Global Ambient to very dark (near pitch black)
+            glLightModelfv(GL_LIGHT_MODEL_AMBIENT, [0.02, 0.02, 0.02, 1.0])
             
-            if lightMode == 1: # POINT LIGHT
-                # Position: High above center
-                light_pos = [0.0, 6.0, 0.0, 1.0] 
-                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0) # No cutoff
+            # 2. Disable the Global "Sun" Light explicitly
+            glDisable(GL_LIGHT0)
 
-            elif lightMode == 2: # DIRECTIONAL LIGHT
-                # Position: ANGLED! (Coming from Top-Right-Front)
-                # w=0.0 means this is a Direction Vector
-                light_pos = [1.0, 1.0, 1.0, 0.0] 
-                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0) # No cutoff
-
-            elif lightMode == 3: # SPOTLIGHT
-                # Position: High above center
-                light_pos = [0.0, 8.0, 0.0, 1.0]
-                
-                # Pointing STRAIGHT DOWN
-                glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0]) 
-                
-                # NARROW Cutoff (30 degrees) -> Creates a visible circle on the tessellated floor
-                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 30.0) 
-                glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 5.0) # Sharper falloff
-
-            # Draw debug sphere for light source (only for Point/Spot)
-            if lightMode != 2:
-                glPushMatrix()
-                glDisable(GL_LIGHTING)
-                glColor3f(1.0, 1.0, 0.0)
-                glTranslatef(light_pos[0], light_pos[1], light_pos[2])
-                glutWireSphere(0.2, 10, 10)
-                glEnable(GL_LIGHTING)
-                glPopMatrix()
-            
         else:
-            # == GAME MODE SETTINGS (Standard) ==
-            if lightMode == 2:  # Directional
-                light_pos = [0.0, 1.0, 1.0, 0.0]
-                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
-            elif lightMode == 3: # Spot
-                light_pos = [0.0, 10.0, 0.0, 1.0]
-                glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0])
-                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 45.0)
-                glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 2.0)
-            else: # Point
-                light_pos = [0.0, 10.0, 5.0, 1.0]
-                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
-
-        # Apply the position we just calculated
-        glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, light0_Intensity)
+            # === MODES 1, 2, 3 (Standard Lights) ===
+            glLightModelfv(GL_LIGHT_MODEL_AMBIENT, [0.2, 0.2, 0.2, 1.0])
         
-        glEnable(GL_LIGHT0)
+            # --- MODE SPECIFIC LIGHT POSITION ---
+            if currentMode == MODE_DISPLAY:
+                # == DISPLAY MODE SETTINGS ==
+                if lightMode == 1: # POINT LIGHT
+                    light_pos = [0.0, 6.0, 0.0, 1.0] 
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0) 
+
+                elif lightMode == 2: # DIRECTIONAL LIGHT
+                    light_pos = [1.0, 1.0, 1.0, 0.0] 
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0) 
+
+                elif lightMode == 3: # SPOTLIGHT
+                    light_pos = [0.0, 8.0, 0.0, 1.0]
+                    glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0]) 
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 30.0) 
+                    glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 5.0)
+
+                # Draw debug sphere (only for Point/Spot)
+                if lightMode != 2:
+                    glPushMatrix()
+                    glDisable(GL_LIGHTING)
+                    glColor3f(1.0, 1.0, 0.0)
+                    glTranslatef(light_pos[0], light_pos[1], light_pos[2])
+                    glutWireSphere(0.2, 10, 10)
+                    glEnable(GL_LIGHTING)
+                    glPopMatrix()
+                
+            else:
+                # == GAME MODE SETTINGS ==
+                if lightMode == 2:  # Directional
+                    light_pos = [0.0, 1.0, 1.0, 0.0]
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
+                elif lightMode == 3: # Spot
+                    light_pos = [0.0, 10.0, 0.0, 1.0]
+                    glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0])
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 45.0)
+                    glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 2.0)
+                else: # Point
+                    light_pos = [0.0, 10.0, 5.0, 1.0]
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
+
+            # --- FIX: These lines are now INSIDE the else block ---
+            # They will only run if lightMode is 1, 2, or 3
+            glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
+            glLightfv(GL_LIGHT0, GL_DIFFUSE, light0_Intensity)
+            glEnable(GL_LIGHT0)
 
     # --- 2. DRAW BASED ON MODE ---
 
     if currentMode == MODE_DISPLAY:
         # === DISPLAY MODE ===
-        
         drawDisplayModeEnvironment()
         
         # Draw Jeep
@@ -362,6 +367,7 @@ def display():
         if lightMode == 1: mode_name = "Point (Omni)"
         elif lightMode == 2: mode_name = "Directional (Sun)"
         elif lightMode == 3: mode_name = "Spotlight (Flashlight)"
+        elif lightMode == 4: mode_name = "Default (Dark)"
             
         text3d(f"Display Mode: {mode_name}", -2.0, 4.0, 0.0)
         
@@ -416,6 +422,10 @@ def display():
             glEnable(GL_LIGHTING)
 
         tunnelObj.draw()
+
+        # --- DRAW STREET LIGHTS ---
+        for sl in allstreetlights:
+            sl.draw()
 
         for cone in allcones:
             cone.draw()
@@ -703,7 +713,7 @@ def menuFunc(value):
     global lightMode, isFullScreen, windowWidth, windowHeight
     global prevWidth, prevHeight, prevPosX, prevPosY
 
-    if 0 <= value <= 3: 
+    if 0 <= value <= 4: 
         print(f"Lighting mode set to: {value}")
         lightMode = value
     
@@ -915,6 +925,35 @@ def loadTexture(imageName):
 def loadSceneTextures():
     global roadTextureID
     roadTextureID = loadTexture("../img/road2.png")
+
+def setupStreetLights():
+    # We have GL_LIGHT2 through GL_LIGHT7 available (6 lights)
+    available_lights = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
+    light_idx = 0
+    
+    # Create lights along the road (z-axis)
+    # Start from z=0 and go up to the end of the land
+    for z_pos in range(0, int(land * gameEnlarge), 40): # Every 40 units
+        
+        # Assign a real light ID if we have any left
+        current_id = None
+        if light_idx < len(available_lights):
+            current_id = available_lights[light_idx]
+            light_idx += 1
+            
+        # Left Side Light
+        sl_left = streetlight.StreetLight(-land - 2, z_pos, current_id)
+        allstreetlights.append(sl_left)
+
+        # Assign next ID for right side if available
+        current_id = None
+        if light_idx < len(available_lights):
+            current_id = available_lights[light_idx]
+            light_idx += 1
+
+        # Right Side Light
+        sl_right = streetlight.StreetLight(land + 2, z_pos, current_id)
+        allstreetlights.append(sl_right)
     
 #-----------------------------------------------lighting work--------------
 def initializeLight():
@@ -1023,6 +1062,7 @@ def main():
     glutAddMenuEntry("Point Light", 1)
     glutAddMenuEntry("Directional Light", 2)
     glutAddMenuEntry("Spotlight", 3)
+    glutAddMenuEntry("Default (Dark)", 4)
 
     resMenu = glutCreateMenu(menuFunc)
     glutAddMenuEntry("600 x 600", 101)
@@ -1041,6 +1081,8 @@ def main():
     jeep1Obj.makeDisplayLists()
     jeep2Obj.makeDisplayLists()
     jeep3Obj.makeDisplayLists()
+
+    setupStreetLights()
 
     # Populate objects (Game Mode specific mostly)
     for i in range(coneAmount):
