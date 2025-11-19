@@ -284,6 +284,8 @@ def display():
 
     setView()
 
+    glEnable(GL_NORMALIZE)
+
     # --- 1. GLOBAL LIGHTING SETUP ---
     if lightMode == 0:  # Ambient/Flat
         glDisable(GL_LIGHTING)
