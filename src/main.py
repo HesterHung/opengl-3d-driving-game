@@ -388,6 +388,8 @@ def display():
             glDisable(GL_LIGHT1)
 
         # Text
+        glDisable(GL_LIGHTING)
+
         beginTime = 6-score
         countTime = score-6
         if (score <= 5):
@@ -403,8 +405,12 @@ def display():
             glColor3f(0.0,1.0,1.0)
             text3d("Scoring: "+str(countTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
 
+        if lightMode != 0:
+            glEnable(GL_LIGHTING)
+
         # Draw Objects
-        for obj in objectArray: obj.draw()
+        for obj in objectArray: 
+            obj.draw()
 
         glDisable(GL_LIGHTING) 
         ribbonObj.draw() 
