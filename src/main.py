@@ -419,7 +419,17 @@ def display():
         ribbonObj.draw() 
         if lightMode != 0: glEnable(GL_LIGHTING)
 
+        if lightMode == 4:
+            # We add a dark grey "glow" (Emission) so it appears visible
+            # This bypasses the ambient light calculation entirely.
+            glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.2, 0.2, 0.2, 1.0])
+        else:
+            # Ensure emission is off for other modes
+            glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.0, 0.0, 0.0, 1.0])
+
         tunnelObj.draw()
+
+        glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.0, 0.0, 0.0, 1.0])
 
         for sl in allstreetlights: sl.draw()
         for cone in allcones: cone.draw()
