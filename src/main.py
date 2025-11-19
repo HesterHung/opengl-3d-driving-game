@@ -83,7 +83,7 @@ skyObj = sky.Sky()
 
 obstacleCoord = []
 rewardCoord = []
-ckSense = 5.0
+ckSense = 6.0
 
 # Dictionary to hold the state of movement keys
 keyState = {
@@ -277,6 +277,25 @@ def drawDisplayModeEnvironment():
         x += step
     glEnd()
 
+def isColliding():
+    # Calculate dynamic hitbox based on Jeep's current size (using sizeX as the scale factor)
+    current_hitbox_radius = ckSense * jeepObj.sizeX 
+
+    # Check against Cones
+    for obstacle in obstacleCoord: 
+        # Calculate distance between Jeep and Cone
+        d = math.sqrt((jeepObj.posX - obstacle[0])**2 + (jeepObj.posZ - obstacle[1])**2)
+        
+        # Check distance against the SCALED radius
+        if d <= current_hitbox_radius: 
+            return True
+            
+    safe_road_width = land - (2.0 * jeepObj.sizeX)
+    
+    if (jeepObj.posX >= safe_road_width or jeepObj.posX <= -safe_road_width): 
+        return True
+        
+    return False
 
 def display():
     global jeepObj, canStart, score, beginTime, countTime, lightMode
@@ -504,6 +523,7 @@ def idle():
     seconds_passed = tickTime / 1000.0
     
     if currentMode == MODE_GAME:
+
         # Game Logic
         boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ)
         if boost_on:
@@ -517,19 +537,39 @@ def idle():
             moveAmount = moveSpeed * seconds_passed
             rotAmount = rotSpeed * seconds_passed
 
+            # === 1. SAVE CURRENT (SAFE) POSITION ===
+            oldX = jeepObj.posX
+            oldZ = jeepObj.posZ
+
+            # === 2. APPLY MOVEMENT ===
+            isMoving = False
+
             if keyState['up']:
                 jeepObj.move(False, moveAmount)
                 jeepObj.wheelDir = 'fwd'
+                isMoving = True
             elif keyState['down']:
                 jeepObj.move(False, -moveAmount)
                 jeepObj.wheelDir = 'back'
+                isMoving = True
             else:
                 jeepObj.wheelDir = 'stop'
 
             if keyState['left']:
                 jeepObj.move(True, rotAmount)
+                isMoving = True 
             elif keyState['right']:
                 jeepObj.move(True, -rotAmount)
+                isMoving = True 
+
+            # Now this check will actually work
+            if isMoving and isColliding(): #
+                # We hit something! Undo the movement.
+                jeepObj.posX = oldX
+                jeepObj.posZ = oldZ
+                
+                # Stop the wheels visually
+                jeepObj.wheelDir = 'stop'
         
         for s in allstars:
             s.update(seconds_passed) 
@@ -988,7 +1028,7 @@ def setupStreetLights():
     
 #-----------------------------------------------lighting work--------------
 def initializeLight():
-    glEnable(GL_DEPTH_TEST)              
+    glEnable(GL_DEPTH_TEST)
     glEnable(GL_NORMALIZE)               
     glClearColor(0.1, 0.1, 0.1, 0.0)
 
