@@ -283,42 +283,49 @@ def display():
     setView()
 
     # --- 1. GLOBAL LIGHTING SETUP ---
-    if lightMode == 0:  # Ambient light
+    if lightMode == 0:  # Ambient/Flat
         glDisable(GL_LIGHTING)
         glDisable(GL_LIGHT0)
     else:
         glEnable(GL_LIGHTING)
+        glEnable(GL_LIGHT0) # Always enable the main light (Sun or Moon)
+
+        # Default "Sun" settings
+        current_light_color = light0_Intensity 
+        light_pos = [0.0, 10.0, 5.0, 1.0] # Default fallback
 
         if lightMode == 4:
-            # === MODE 4 (Default/Dark) ===
-            # 1. Set Global Ambient to very dark (near pitch black)
-            glLightModelfv(GL_LIGHT_MODEL_AMBIENT, [0.02, 0.02, 0.02, 1.0])
+            # === MODE 4 (Moonlight / Dark) ===
+            # 1. Low Ambient (Base darkness)
+            glLightModelfv(GL_LIGHT_MODEL_AMBIENT, [0.05, 0.05, 0.05, 1.0])
             
-            # 2. Disable the Global "Sun" Light explicitly
-            glDisable(GL_LIGHT0)
+            # 2. "Moon" Settings (Dim Blue-ish Light)
+            # This ensures the road and tunnel get lit, not just the Jeep
+            moon_color = [0.15, 0.15, 0.25, 1.0] 
+            current_light_color = moon_color
+            
+            # Position: Directional light from above
+            light_pos = [0.0, 10.0, 5.0, 0.0] 
 
         else:
-            # === MODES 1, 2, 3 (Standard Lights) ===
+            # === MODES 1, 2, 3 (Standard Day) ===
             glLightModelfv(GL_LIGHT_MODEL_AMBIENT, [0.2, 0.2, 0.2, 1.0])
-        
-            # --- MODE SPECIFIC LIGHT POSITION ---
+            
+            # Position Logic
             if currentMode == MODE_DISPLAY:
-                # == DISPLAY MODE SETTINGS ==
-                if lightMode == 1: # POINT LIGHT
-                    light_pos = [0.0, 6.0, 0.0, 1.0] 
-                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0) 
-
-                elif lightMode == 2: # DIRECTIONAL LIGHT
-                    light_pos = [1.0, 1.0, 1.0, 0.0] 
-                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0) 
-
-                elif lightMode == 3: # SPOTLIGHT
+                if lightMode == 1: # Point
+                    light_pos = [0.0, 6.0, 0.0, 1.0]
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
+                elif lightMode == 2: # Directional
+                    light_pos = [1.0, 1.0, 1.0, 0.0]
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
+                elif lightMode == 3: # Spot
                     light_pos = [0.0, 8.0, 0.0, 1.0]
-                    glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0]) 
-                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 30.0) 
+                    glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0])
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 30.0)
                     glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 5.0)
-
-                # Draw debug sphere (only for Point/Spot)
+                
+                # Debug Sphere
                 if lightMode != 2:
                     glPushMatrix()
                     glDisable(GL_LIGHTING)
@@ -327,54 +334,40 @@ def display():
                     glutWireSphere(0.2, 10, 10)
                     glEnable(GL_LIGHTING)
                     glPopMatrix()
-                
             else:
-                # == GAME MODE SETTINGS ==
-                if lightMode == 2:  # Directional
-                    light_pos = [0.0, 1.0, 1.0, 0.0]
-                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
-                elif lightMode == 3: # Spot
+                # Game Mode Positions
+                if lightMode == 2: light_pos = [0.0, 1.0, 1.0, 0.0]
+                elif lightMode == 3: 
                     light_pos = [0.0, 10.0, 0.0, 1.0]
                     glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0])
                     glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 45.0)
-                    glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 2.0)
-                else: # Point
-                    light_pos = [0.0, 10.0, 5.0, 1.0]
-                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
 
-            # --- FIX: These lines are now INSIDE the else block ---
-            # They will only run if lightMode is 1, 2, or 3
-            glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
-            glLightfv(GL_LIGHT0, GL_DIFFUSE, light0_Intensity)
-            glEnable(GL_LIGHT0)
+        # --- APPLY THE CALCULATED LIGHT SETTINGS ---
+        glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
+        
+        # Important: Apply the color we chose (Sun or Moon)
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, current_light_color)
+        glLightfv(GL_LIGHT0, GL_SPECULAR, current_light_color)
+
 
     # --- 2. DRAW BASED ON MODE ---
-
     if currentMode == MODE_DISPLAY:
-        # === DISPLAY MODE ===
         drawDisplayModeEnvironment()
-        
-        # Draw Jeep
         jeepObj.draw()
         jeepObj.drawW1()
         jeepObj.drawW2()
         
-        # Show text
         glDisable(GL_LIGHTING)
         glColor3f(0.0, 1.0, 1.0)
-        
         mode_name = "Ambient"
-        if lightMode == 1: mode_name = "Point (Omni)"
-        elif lightMode == 2: mode_name = "Directional (Sun)"
-        elif lightMode == 3: mode_name = "Spotlight (Flashlight)"
-        elif lightMode == 4: mode_name = "Default (Dark)"
-            
+        if lightMode == 1: mode_name = "Point"
+        elif lightMode == 2: mode_name = "Directional"
+        elif lightMode == 3: mode_name = "Spotlight"
+        elif lightMode == 4: mode_name = "Default (Moonlight)"
         text3d(f"Display Mode: {mode_name}", -2.0, 4.0, 0.0)
         
     else:
-        # === GAME MODE ===
-        
-        # Headlight Logic
+        # Headlights
         if jeepObj.lightOn and lightMode != 0: 
             glEnable(GL_LIGHT1)
             glPushMatrix()
@@ -384,10 +377,8 @@ def display():
             headlightColor = [1.5, 1.5, 1.5, 1.0]
             glLightfv(GL_LIGHT1, GL_DIFFUSE, headlightColor)
             glLightfv(GL_LIGHT1, GL_SPECULAR, headlightColor)
-            lightPos = [0.0, 1.0, 3.0, 1.0] 
-            glLightfv(GL_LIGHT1, GL_POSITION, lightPos)
-            spotDir = [0.0, -1.0, 1.0] 
-            glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, spotDir)
+            glLightfv(GL_LIGHT1, GL_POSITION, [0.0, 1.0, 3.0, 1.0])
+            glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, [0.0, -1.0, 1.0])
             glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 60.0)
             glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 2.0)
             glLightf(GL_LIGHT1, GL_CONSTANT_ATTENUATION, 0.1)
@@ -396,7 +387,7 @@ def display():
         else:
             glDisable(GL_LIGHT1)
 
-        # Game Text
+        # Text
         beginTime = 6-score
         countTime = score-6
         if (score <= 5):
@@ -412,26 +403,18 @@ def display():
             glColor3f(0.0,1.0,1.0)
             text3d("Scoring: "+str(countTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
 
-        # Draw Scene Objects
-        for obj in objectArray:
-            obj.draw()
+        # Draw Objects
+        for obj in objectArray: obj.draw()
 
         glDisable(GL_LIGHTING) 
         ribbonObj.draw() 
-        if lightMode != 0:
-            glEnable(GL_LIGHTING)
+        if lightMode != 0: glEnable(GL_LIGHTING)
 
         tunnelObj.draw()
 
-        # --- DRAW STREET LIGHTS ---
-        for sl in allstreetlights:
-            sl.draw()
-
-        for cone in allcones:
-            cone.draw()
-
-        for star in allstars:
-            star.draw()
+        for sl in allstreetlights: sl.draw()
+        for cone in allcones: cone.draw()
+        for star in allstars: star.draw()
 
         jeepObj.draw()
         jeepObj.drawW1()
