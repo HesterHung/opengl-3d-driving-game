@@ -879,22 +879,22 @@ def showHelp():
     drawTextBitmap("Left/Right Arrows: Turn Jeep Left / Right", -0.8, 0.5)
     drawTextBitmap("Spacebar: Stop wheel rotation (Brake)", -0.8, 0.4)
     drawTextBitmap("'+' / '-': Increase / Decrease Jeep Size", -0.8, 0.3)
+    drawTextBitmap("'l': Toggle Headlights", -0.8, 0.2) # <--- ADDED THIS LINE
 
     glColor3f(0.0, 1.0, 0.0)
-    drawTextBitmap("Camera Controls:", -0.9, 0.1)
+    drawTextBitmap("Camera Controls:", -0.9, 0.0) # Moved down slightly to fit above
     glColor3f(1.0, 1.0, 1.0)
-    drawTextBitmap("Middle Mouse + Drag: Orbit Camera", -0.8, 0.0)
-    drawTextBitmap("'z' / 'x': Zoom In / Zoom Out", -0.8, -0.1)
-    drawTextBitmap("'t': Toggle Top-Down View", -0.8, -0.2)
-    drawTextBitmap("'b': Toggle Behind-Jeep View", -0.8, -0.3)
-    drawTextBitmap("'c': Reset Camera to Default (orbits jeep)", -0.8, -0.4) 
+    drawTextBitmap("Middle Mouse + Drag: Orbit Camera", -0.8, -0.1)
+    drawTextBitmap("'z' / 'x': Zoom In / Zoom Out", -0.8, -0.2)
+    drawTextBitmap("'t': Toggle Top-Down View", -0.8, -0.3)
+    drawTextBitmap("'b': Toggle Behind-Jeep View", -0.8, -0.4)
+    drawTextBitmap("'c': Reset Camera to Default (orbits jeep)", -0.8, -0.5) 
 
     glColor3f(0.0, 1.0, 0.0)
-    drawTextBitmap("Other:", -0.9, -0.6)
+    drawTextBitmap("Other:", -0.9, -0.7)
     glColor3f(1.0, 1.0, 1.0)
-    drawTextBitmap("'h': Close this Help Window", -0.8, -0.7)
-    drawTextBitmap("Right Mouse Click: Open Main Menu", -0.8, -0.8)
-    drawTextBitmap("  -> Lighting, Resolution, Fullscreen", -0.7, -0.9) 
+    drawTextBitmap("'h': Close this Help Window", -0.8, -0.8)
+    drawTextBitmap("Right Mouse Click: Open Main Menu", -0.8, -0.9) 
 
     glutSwapBuffers()
 
@@ -966,7 +966,7 @@ def show_launcher():
     global windowWidth, windowHeight, isFullScreen, currentMode
 
     def start_game():
-        global windowWidth, windowHeight, isFullScreen, currentMode
+        global windowWidth, windowHeight, isFullScreen, currentMode, lightMode, behindView
         
         # 1. Resolution / Fullscreen
         res_selection = resolution_var.get()
@@ -984,9 +984,13 @@ def show_launcher():
         mode_selection = mode_var.get()
         if mode_selection == "Display Mode (Lighting Test)":
             currentMode = MODE_DISPLAY
+            lightMode = 0
+            behindView = False
             print("Starting in Display Mode")
         else:
             currentMode = MODE_GAME
+            lightMode = 4
+            behindView = True
             print("Starting in Game Mode")
         
         root.destroy()
