@@ -151,22 +151,75 @@ class Scene:
 
     def drawLand(self):
         glEnable(GL_TEXTURE_2D)
-        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
+        
+        # 1. Light Mode Check
+        if lightMode == 0:
+            glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
+        else:
+            glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE)
+            glColor3f(1.0, 1.0, 1.0)
+            glMaterialfv(GL_FRONT, GL_AMBIENT, [0.2, 0.2, 0.2, 1.0])
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, [1.0, 1.0, 1.0, 1.0])
+
         glBindTexture(GL_TEXTURE_2D, roadTextureID)
 
-        glBegin(GL_POLYGON)
+        # 2. Define Road Boundaries for Texture Mapping
+        # We need these to calculate the "percentage" of the road we are at
+        L = self.landLength
+        C = self.cont
+        
+        minX = -L
+        maxX = L
+        totalWidth = maxX - minX
 
-        glTexCoord2f(self.landH, self.landH)
-        glVertex3f(self.landLength, 0, self.cont * self.landLength)
+        minZ = -L
+        maxZ = C * L
+        totalLength = maxZ - minZ
 
-        glTexCoord2f(self.landH, self.landW)
-        glVertex3f(self.landLength, 0, -self.landLength)
+        # 3. Draw the Subdivided Grid
+        startZ = minZ
+        endZ = maxZ
+        startX = minX
+        endX = maxX
+        
+        step = 2.0  # Tile size
 
-        glTexCoord2f(self.landW, self.landW)
-        glVertex3f(-self.landLength, 0, -self.landLength)
+        glNormal3f(0.0, 1.0, 0.0) 
 
-        glTexCoord2f(self.landW, self.landH)
-        glVertex3f(-self.landLength, 0, self.cont * self.landLength)
+        glBegin(GL_QUADS)
+        
+        z = startZ
+        while z < endZ:
+            x = startX
+            while x < endX:
+                # Grid coordinates
+                x1, z1 = x, z
+                x2, z2 = x + step, z + step
+
+                # --- TEXTURE FIX START ---
+                # Map x and z to a 0.0 - 1.0 range based on the WHOLE road size.
+                # (Matches your original logic: Left=+X=0, Right=-X=1, Far=+Z=0, Near=-Z=1)
+                
+                # U coordinate (Width)
+                # Original logic was: x=L -> u=0, x=-L -> u=1
+                u1 = (L - x1) / totalWidth
+                u2 = (L - x2) / totalWidth
+
+                # V coordinate (Length)
+                # Original logic was: z=10L -> v=0, z=-L -> v=1
+                v1 = (maxZ - z1) / totalLength
+                v2 = (maxZ - z2) / totalLength
+                # --- TEXTURE FIX END ---
+
+                # Draw the quad
+                glTexCoord2f(u1, v1); glVertex3f(x1, 0, z1)
+                glTexCoord2f(u1, v2); glVertex3f(x1, 0, z2)
+                glTexCoord2f(u2, v2); glVertex3f(x2, 0, z2)
+                glTexCoord2f(u2, v1); glVertex3f(x2, 0, z1)
+                
+                x += step
+            z += step
+            
         glEnd()
 
         glDisable(GL_TEXTURE_2D)
@@ -184,6 +237,7 @@ def display():
 
     setView()
 
+    # --- 1. GLOBAL LIGHTING SETUP ---
     if lightMode == 0:  # Ambient light
         glDisable(GL_LIGHTING)
     else:
@@ -202,50 +256,55 @@ def display():
             glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 45.0)
             glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 2.0)
         else:
-            glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)  # Disable spot for point/directional
+            glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
         
         glEnable(GL_LIGHT0)
+        # (Sphere drawing code omitted for brevity, but you can keep it if you wish)
 
-        # Draw test spheres for lighting
+    # --- 2. HEADLIGHT LOGIC (Moved to TOP) ---
+    # We do this HERE so the road (drawn next) can see the light.
+    if jeepObj.lightOn and lightMode != 0: 
+        glEnable(GL_LIGHT1)
         glPushMatrix()
-        glLoadIdentity()
-        gluLookAt(0.0, 3.0, 5.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+        
+        # Move light to Jeep's position
+        glTranslatef(jeepObj.posX, jeepObj.posY, jeepObj.posZ)
+        glRotatef(jeepObj.rotation, 0.0, 1.0, 0.0)
+        glScalef(jeepObj.sizeX, jeepObj.sizeY, jeepObj.sizeZ)
 
-        glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
-        pointPosition = [0.0,-10.0,0.0]
+        # Light Settings
+        headlightColor = [1.5, 1.5, 1.5, 1.0] # Increased brightness
+        glLightfv(GL_LIGHT1, GL_DIFFUSE, headlightColor)
+        glLightfv(GL_LIGHT1, GL_SPECULAR, headlightColor)
 
-        glDisable(GL_LIGHTING)
+        # --- FIX 1: RAISE THE POSITION ---
+        # Old: [0.0, 0.0, 3.5, 1.0]
+        # New: [0.0, 1.0, 3.0, 1.0] 
+        # We lift Y to 1.0 so it's high enough to shine DOWN.
+        lightPos = [0.0, 1.0, 3.0, 1.0] 
+        glLightfv(GL_LIGHT1, GL_POSITION, lightPos)
 
-        glColor3f(light0_Intensity[0], light0_Intensity[1], light0_Intensity[2])
+        # --- FIX 2: TILT THE DIRECTION DOWN ---
+        # Old: [0.0, -0.2, 1.0] (Mostly forward)
+        # New: [0.0, -1.0, 1.0] (45 degrees down)
+        # This forces the light to hit the road geometry.
+        spotDir = [0.0, -1.0, 1.0] 
+        glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, spotDir)
 
-        glTranslatef(light_pos[0], light_pos[1], light_pos[2])
-
-        glutSolidSphere(0.025, 36, 24)
-
-        glTranslatef(-light_pos[0], -light_pos[1], -light_pos[2])
-        glEnable(GL_LIGHTING)
-        glMaterialfv(GL_FRONT, GL_AMBIENT, matAmbient)
-        for x in range(1,4):
-            for z in range(1,4):
-                 matDiffuse = [float(x) * 0.3, float(x) * 0.3, float(x) * 0.3, 1.0] 
-                 matSpecular = [float(z) * 0.3, float(z) * 0.3, float(z) * 0.3, 1.0]  
-                 matShininess = float(z * z) * 10.0
-                 ## Set the material diffuse values for the polygon front faces. 
-                 glMaterialfv(GL_FRONT, GL_DIFFUSE, matDiffuse)
-
-                 ## Set the material specular values for the polygon front faces. 
-                 glMaterialfv(GL_FRONT, GL_SPECULAR, matSpecular)
-
-                 ## Set the material shininess value for the polygon front faces. 
-                 glMaterialfv(GL_FRONT, GL_SHININESS, matShininess)
-
-                 ## Draw a glut solid sphere with inputs radius, slices, and stacks
-                 glutSolidSphere(0.25, 72, 64)
-                 glTranslatef(1.0, 0.0, 0.0)
-
-            glTranslatef(-3.0, 0.0, 1.0)
+        # --- FIX 3: WIDEN THE BEAM ---
+        # Old: 30.0
+        # New: 60.0 (Wider cone covers more road)
+        glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 60.0)
+        glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 2.0) # Lower exponent = softer edge
+        
+        # Attenuation (Keep this low so it reaches the ground)
+        glLightf(GL_LIGHT1, GL_CONSTANT_ATTENUATION, 0.1)
+        glLightf(GL_LIGHT1, GL_LINEAR_ATTENUATION, 0.01)
         glPopMatrix()
-   
+    else:
+        glDisable(GL_LIGHT1)
+
+    # --- 3. GAME LOGIC (Text) ---
     beginTime = 6-score
     countTime = score-6
     if (score <= 5):
@@ -261,19 +320,16 @@ def display():
         glColor3f(0.0,1.0,1.0)
         text3d("Scoring: "+str(countTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
 
+    # --- 4. DRAW SCENE (The Road) ---
+    # Because the Headlight was set up in step 2, the road will now light up!
     for obj in objectArray:
         obj.draw()
 
-    # --- NEW: Draw the Boost Ribbon ---
-    # Disable lighting so it's always bright
+    # --- 5. DRAW OBJECTS ---
     glDisable(GL_LIGHTING) 
-    
-    ribbonObj.draw() # <--- CALL THE OBJECT'S DRAW METHOD
-    
-    # Re-enable lighting if it was supposed to be on
+    ribbonObj.draw() 
     if lightMode != 0:
         glEnable(GL_LIGHTING)
-    # --- End Boost Ribbon ---
 
     tunnelObj.draw()
 
@@ -283,48 +339,11 @@ def display():
     for star in allstars:
         star.draw()
 
-    # if (usedDiamond == False):
-    #     diamondObj.draw()
-    
-    if jeepObj.lightOn and lightMode != 0: 
-        glEnable(GL_LIGHT1) # Enable the second light source
-        
-        glPushMatrix() # Save current view (camera)
-        
-        # Move coordinate system to the Jeep's position
-        # We do this so we can set the light relative to the car (0,0,0)
-        glTranslatef(jeepObj.posX, jeepObj.posY, jeepObj.posZ)
-        glRotatef(jeepObj.rotation, 0.0, 1.0, 0.0)
-        glScalef(jeepObj.sizeX, jeepObj.sizeY, jeepObj.sizeZ)
-
-        # 1. Color of the headlight (Bright slightly yellow)
-        headlightColor = [1.0, 1.0, 0.8, 1.0] 
-        glLightfv(GL_LIGHT1, GL_DIFFUSE, headlightColor)
-        glLightfv(GL_LIGHT1, GL_SPECULAR, headlightColor)
-
-        # 2. Position: Slightly in front (Z=3.5) of the Jeep center
-        lightPos = [0.0, 0.0, 3.5, 1.0] 
-        glLightfv(GL_LIGHT1, GL_POSITION, lightPos)
-
-        # 3. Direction: Pointing straight ahead (Z=1.0) and slightly down (Y=-0.2)
-        spotDir = [0.0, -0.2, 1.0] 
-        glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, spotDir)
-
-        # 4. Cone shape: 30 degree beam width
-        glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 30.0)
-        glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 20.0) # Focus intensity
-
-        glPopMatrix() # Restore view to normal world coordinates
-
-    else:
-        glDisable(GL_LIGHT1) # Turn off if key isn't pressed
-
     jeepObj.draw()
     jeepObj.drawW1()
     jeepObj.drawW2()
     jeepObj.drawLight()
     glPopMatrix()
-    #personObj.draw()
     glutSwapBuffers()
 
 def idle():
