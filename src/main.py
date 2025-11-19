@@ -5,7 +5,7 @@ from OpenGL.GLU import *
 import math, time, random, csv, datetime
 import ImportObject
 import PIL.Image as Image
-import jeep, cone, star, ribbon, NurbsLoader, streetlight
+import jeep, cone, star, ribbon, NurbsLoader, streetlight, sky
 import tkinter as tk            
 from tkinter import ttk          
 
@@ -79,6 +79,8 @@ allcones = []
 allstars = []
 allstreetlights = []
 
+skyObj = sky.Sky()
+
 obstacleCoord = []
 rewardCoord = []
 ckSense = 5.0
@@ -105,7 +107,7 @@ BOOST_ROT_SPEED = 120.0 # Make turning a bit faster too
 ribbonObj = ribbon.ribbon(z_pos=50.0, length=5.0, width=land)
 
 tunnelObj = NurbsLoader.NurbsModel(
-    0.0, 0.0, 20.0, 
+    0.0, 0.0, 100.0, 
     "../nurbs/tunnel.txt", 
     scale=(2.5, 2.5, 2.5), 
     color=(0.4, 0.4, 0.4)
@@ -349,6 +351,7 @@ def display():
         glLightfv(GL_LIGHT0, GL_DIFFUSE, current_light_color)
         glLightfv(GL_LIGHT0, GL_SPECULAR, current_light_color)
 
+    skyObj.draw()
 
     # --- 2. DRAW BASED ON MODE ---
     if currentMode == MODE_DISPLAY:
