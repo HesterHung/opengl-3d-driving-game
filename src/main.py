@@ -383,48 +383,59 @@ def setView():
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
 
-    # Add this check to prevent division by zero
+    # Avoid division by zero
     if windowHeight == 0:
         windowHeight = 1
     
-    # Calculate the correct aspect ratio
     aspect = float(windowWidth) / float(windowHeight)
-
-    # Set the perspective
-    gluPerspective(90, aspect, 0.1, 100)
+    gluPerspective(90, aspect, 0.1, 1000.0)  # extend far plane a bit for zoomed-out views
 
     # --- 2. Set the MODELVIEW Matrix ---
     glMatrixMode(GL_MODELVIEW)
-    glLoadIdentity() # Reset the MODELVIEW matrix
+    glLoadIdentity()
 
     # --- 3. Set the Camera (View) ---
-    if (topView == True):
-        gluLookAt(jeepObj.posX, 20.0, jeepObj.posZ,   # Eye is 20 units *above* the jeep
-                        jeepObj.posX, jeepObj.posY, jeepObj.posZ,   # Center is the jeep itself
-                        0.0, 0.0, 1.0)
-    elif (behindView ==True):
-        behind_dist = 10.0  
-        above_dist = 8.0   
-        
+    if topView:
+        # Use radius as the camera height (zoom in/out changes height)
+        eye_x = jeepObj.posX
+        eye_y = max(1.0, radius)  # keep a minimum height
+        eye_z = jeepObj.posZ
+        center_x = jeepObj.posX
+        center_y = jeepObj.posY
+        center_z = jeepObj.posZ
+        # Up vector points along +Z for a true top-down on XZ ground plane
+        gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 0.0, 1.0)
+
+    elif behindView:
+        # Use radius to control how far and how high the camera is
+        # Split radius into behind and above components for a natural chase-cam
+        # Tune these weights to taste
+        behind_fraction = 0.8
+        above_fraction  = 0.4
+        behind_dist = max(1.0, radius * behind_fraction)
+        above_dist  = max(0.5, radius * above_fraction)
+
         rad_angle = math.radians(jeepObj.rotation)
         eye_x = jeepObj.posX - behind_dist * math.sin(rad_angle)
         eye_y = jeepObj.posY + above_dist
         eye_z = jeepObj.posZ - behind_dist * math.cos(rad_angle)
-        
+
         center_x = jeepObj.posX
         center_y = jeepObj.posY
         center_z = jeepObj.posZ
 
-        gluLookAt(eye_x, eye_y, eye_z,  
-                  center_x, center_y, center_z, 
-                  0, 1, 0)                   
-    else:
-        gluLookAt(eyeX, eyeY, eyeZ,                     # Eye (calculated relative to jeep)
-                    jeepObj.posX, jeepObj.posY, jeepObj.posZ, # Center (the jeep itself)
-                    0, 1, 0)
-    
-    glutPostRedisplay()
+        gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 1.0, 0.0)
 
+    else:
+        # Default orbit camera around the jeep using angle/phi/radius
+        # recalculateEyePos() already sets eyeX/eyeY/eyeZ from radius/angle/phi
+        # Make sure those are up-to-date when this path is used.
+        gluLookAt(eyeX, eyeY, eyeZ,
+                  jeepObj.posX, jeepObj.posY, jeepObj.posZ,
+                  0.0, 1.0, 0.0)
+
+    glutPostRedisplay()
+    
 def setObjView():
     # things to do
     # realize a view following the jeep
