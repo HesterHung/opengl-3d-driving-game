@@ -178,6 +178,9 @@ class jeep:
         elif rot == True: 
             self.rotation+= val
 
+    def toggleLight(self):
+        self.lightOn = not self.lightOn
+        print(f"Headlights: {self.lightOn}")
 
         
         

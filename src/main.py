@@ -286,6 +286,39 @@ def display():
     # if (usedDiamond == False):
     #     diamondObj.draw()
     
+    if jeepObj.lightOn and lightMode != 0: 
+        glEnable(GL_LIGHT1) # Enable the second light source
+        
+        glPushMatrix() # Save current view (camera)
+        
+        # Move coordinate system to the Jeep's position
+        # We do this so we can set the light relative to the car (0,0,0)
+        glTranslatef(jeepObj.posX, jeepObj.posY, jeepObj.posZ)
+        glRotatef(jeepObj.rotation, 0.0, 1.0, 0.0)
+        glScalef(jeepObj.sizeX, jeepObj.sizeY, jeepObj.sizeZ)
+
+        # 1. Color of the headlight (Bright slightly yellow)
+        headlightColor = [1.0, 1.0, 0.8, 1.0] 
+        glLightfv(GL_LIGHT1, GL_DIFFUSE, headlightColor)
+        glLightfv(GL_LIGHT1, GL_SPECULAR, headlightColor)
+
+        # 2. Position: Slightly in front (Z=3.5) of the Jeep center
+        lightPos = [0.0, 0.0, 3.5, 1.0] 
+        glLightfv(GL_LIGHT1, GL_POSITION, lightPos)
+
+        # 3. Direction: Pointing straight ahead (Z=1.0) and slightly down (Y=-0.2)
+        spotDir = [0.0, -0.2, 1.0] 
+        glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, spotDir)
+
+        # 4. Cone shape: 30 degree beam width
+        glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 30.0)
+        glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 20.0) # Focus intensity
+
+        glPopMatrix() # Restore view to normal world coordinates
+
+    else:
+        glDisable(GL_LIGHT1) # Turn off if key isn't pressed
+
     jeepObj.draw()
     jeepObj.drawW1()
     jeepObj.drawW2()
@@ -576,6 +609,9 @@ def myKeyboard(key, mX, mY):
         phi = 0.0
 
         recalculateEyePos()
+
+    elif key == b'l': # 'l' for Lights
+        jeepObj.toggleLight()
 
     setView() # Update the view after a keypress
     # things can do
