@@ -944,7 +944,7 @@ def setupStreetLights():
             light_idx += 1
             
         # Left Side Light
-        sl_left = streetlight.StreetLight(-land - 2, z_pos, current_id)
+        sl_left = streetlight.StreetLight(-land + 1.5, z_pos, current_id)
         allstreetlights.append(sl_left)
 
         # Assign next ID for right side if available
@@ -954,7 +954,7 @@ def setupStreetLights():
             light_idx += 1
 
         # Right Side Light
-        sl_right = streetlight.StreetLight(land + 2, z_pos, current_id)
+        sl_right = streetlight.StreetLight(land - 1.5, z_pos, current_id)
         allstreetlights.append(sl_right)
     
 #-----------------------------------------------lighting work--------------
