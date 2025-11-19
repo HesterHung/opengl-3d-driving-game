@@ -5,7 +5,7 @@ from OpenGL.GLU import *
 import math, time, random, csv, datetime
 import ImportObject
 import PIL.Image as Image
-import jeep, cone, star, ribbon
+import jeep, cone, star, ribbon, NurbsLoader
 import tkinter as tk            
 from tkinter import ttk          
 
@@ -94,10 +94,15 @@ NORMAL_ROT_SPEED = rotSpeed
 BOOST_SPEED = 25.0
 BOOST_ROT_SPEED = 120.0 # Make turning a bit faster too
 
-# --- NEW: Create the ribbon object ---
 # We pass it the Z position, its length, and the width of the road (`land`)
 ribbonObj = ribbon.ribbon(z_pos=50.0, length=5.0, width=land)
-# ---------------------------------------------------
+
+tunnelObj = NurbsLoader.NurbsModel(
+    0.0, 0.0, 20.0, 
+    "../nurbs/tunnel.txt", 
+    scale=(2.5, 2.5, 2.5), 
+    color=(0.4, 0.4, 0.4)
+)
 
 
 #concerned with lighting#########################!!!!!!!!!!!!!!!!##########
@@ -270,6 +275,8 @@ def display():
         glEnable(GL_LIGHTING)
     # --- End Boost Ribbon ---
 
+    tunnelObj.draw()
+
     for cone in allcones:
         cone.draw()
 
@@ -435,7 +442,7 @@ def setView():
                   0.0, 1.0, 0.0)
 
     glutPostRedisplay()
-    
+
 def setObjView():
     # things to do
     # realize a view following the jeep
