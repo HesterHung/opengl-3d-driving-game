@@ -35,7 +35,7 @@ class Sky:
 
         # --- DRAW MOON ---
         # Position the moon high up and somewhat in front/right
-        glTranslatef(50.0, 100.0, -150.0) 
+        glTranslatef(-100.0, 70.0, 300.0)
         
         # Moon Color (Pale Yellow/White)
         glColor3f(0.9, 0.9, 0.8) 
