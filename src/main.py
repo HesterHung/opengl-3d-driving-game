@@ -9,6 +9,11 @@ import jeep, cone, star, ribbon, NurbsLoader
 import tkinter as tk            
 from tkinter import ttk          
 
+# --- Mode Constants ---
+MODE_GAME = 0
+MODE_DISPLAY = 1
+currentMode = MODE_GAME # Default
+
 # windowSize = 600
 windowWidth = 600
 windowHeight = 600
@@ -196,20 +201,12 @@ class Scene:
                 x1, z1 = x, z
                 x2, z2 = x + step, z + step
 
-                # --- TEXTURE FIX START ---
                 # Map x and z to a 0.0 - 1.0 range based on the WHOLE road size.
-                # (Matches your original logic: Left=+X=0, Right=-X=1, Far=+Z=0, Near=-Z=1)
-                
-                # U coordinate (Width)
-                # Original logic was: x=L -> u=0, x=-L -> u=1
                 u1 = (L - x1) / totalWidth
                 u2 = (L - x2) / totalWidth
 
-                # V coordinate (Length)
-                # Original logic was: z=10L -> v=0, z=-L -> v=1
                 v1 = (maxZ - z1) / totalLength
                 v2 = (maxZ - z2) / totalLength
-                # --- TEXTURE FIX END ---
 
                 # Draw the quad
                 glTexCoord2f(u1, v1); glVertex3f(x1, 0, z1)
@@ -231,8 +228,54 @@ def staticObjects():
     print ('append')
 
 
+def drawDisplayModeEnvironment():
+    """
+    Draws a HIGHLY TESSELLATED square floor. 
+    Tessellation (many small squares) is crucial for Spotlights to work 
+    correctly, as OpenGL fixed-function calculates lighting only at vertices.
+    """
+    # Draw Axis
+    glColor4f(0.5, 0.5, 0.5, 0.5)
+    glBegin(GL_LINES)
+    glVertex(-20, 0, 0); glVertex(20, 0, 0)
+    glVertex(0, -20, 0); glVertex(0, 20, 0)
+    glVertex(0, 0, -20); glVertex(0, 0, 20)
+    glEnd()
+
+    glDisable(GL_TEXTURE_2D)
+    glNormal3f(0.0, 1.0, 0.0)
+    
+    # Set material for lighting
+    if lightMode != 0:
+        # Matte gray floor to show lights clearly
+        glMaterialfv(GL_FRONT, GL_AMBIENT, [0.2, 0.2, 0.2, 1.0])
+        glMaterialfv(GL_FRONT, GL_DIFFUSE, [0.6, 0.6, 0.6, 1.0])
+        glMaterialfv(GL_FRONT, GL_SPECULAR, [0.0, 0.0, 0.0, 1.0]) # No shine on floor
+    
+    glColor3f(0.6, 0.6, 0.6)
+    
+    # --- TESSELLATION LOOP ---
+    floorRadius = 15 # -15 to 15
+    step = 0.5 # Smaller step = more vertices = better spotlight circle
+    
+    y = -0.01 
+
+    glBegin(GL_QUADS)
+    x = -floorRadius
+    while x < floorRadius:
+        z = -floorRadius
+        while z < floorRadius:
+            glVertex3f(x, y, z)
+            glVertex3f(x, y, z + step)
+            glVertex3f(x + step, y, z + step)
+            glVertex3f(x + step, y, z)
+            z += step
+        x += step
+    glEnd()
+
+
 def display():
-    global jeepObj, canStart, score, beginTime, countTime
+    global jeepObj, canStart, score, beginTime, countTime, lightMode
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
     setView()
@@ -242,195 +285,241 @@ def display():
         glDisable(GL_LIGHTING)
     else:
         glEnable(GL_LIGHTING)
-        # Set light position based on mode
-        if lightMode == 2:  # Directional
-            light_pos = [0.0, 1.0, 1.0, 0.0]
-        else:
-            light_pos = [0.0, 1.0, 1.0, 1.0]
         
+        # --- MODE SPECIFIC LIGHT POSITION ---
+        if currentMode == MODE_DISPLAY:
+            # == DISPLAY MODE SETTINGS ==
+            
+            if lightMode == 1: # POINT LIGHT
+                # Position: High above center
+                light_pos = [0.0, 6.0, 0.0, 1.0] 
+                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0) # No cutoff
+
+            elif lightMode == 2: # DIRECTIONAL LIGHT
+                # Position: ANGLED! (Coming from Top-Right-Front)
+                # w=0.0 means this is a Direction Vector
+                light_pos = [1.0, 1.0, 1.0, 0.0] 
+                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0) # No cutoff
+
+            elif lightMode == 3: # SPOTLIGHT
+                # Position: High above center
+                light_pos = [0.0, 8.0, 0.0, 1.0]
+                
+                # Pointing STRAIGHT DOWN
+                glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0]) 
+                
+                # NARROW Cutoff (30 degrees) -> Creates a visible circle on the tessellated floor
+                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 30.0) 
+                glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 5.0) # Sharper falloff
+
+            # Draw debug sphere for light source (only for Point/Spot)
+            if lightMode != 2:
+                glPushMatrix()
+                glDisable(GL_LIGHTING)
+                glColor3f(1.0, 1.0, 0.0)
+                glTranslatef(light_pos[0], light_pos[1], light_pos[2])
+                glutWireSphere(0.2, 10, 10)
+                glEnable(GL_LIGHTING)
+                glPopMatrix()
+            
+        else:
+            # == GAME MODE SETTINGS (Standard) ==
+            if lightMode == 2:  # Directional
+                light_pos = [0.0, 1.0, 1.0, 0.0]
+                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
+            elif lightMode == 3: # Spot
+                light_pos = [0.0, 10.0, 0.0, 1.0]
+                glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0])
+                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 45.0)
+                glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 2.0)
+            else: # Point
+                light_pos = [0.0, 10.0, 5.0, 1.0]
+                glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
+
+        # Apply the position we just calculated
         glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
         glLightfv(GL_LIGHT0, GL_DIFFUSE, light0_Intensity)
         
-        if lightMode == 3:  # Spotlight
-            glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0])
-            glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 45.0)
-            glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 2.0)
-        else:
-            glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
-        
         glEnable(GL_LIGHT0)
-        # (Sphere drawing code omitted for brevity, but you can keep it if you wish)
 
-    # --- 2. HEADLIGHT LOGIC (Moved to TOP) ---
-    # We do this HERE so the road (drawn next) can see the light.
-    if jeepObj.lightOn and lightMode != 0: 
-        glEnable(GL_LIGHT1)
-        glPushMatrix()
+    # --- 2. DRAW BASED ON MODE ---
+
+    if currentMode == MODE_DISPLAY:
+        # === DISPLAY MODE ===
         
-        # Move light to Jeep's position
-        glTranslatef(jeepObj.posX, jeepObj.posY, jeepObj.posZ)
-        glRotatef(jeepObj.rotation, 0.0, 1.0, 0.0)
-        glScalef(jeepObj.sizeX, jeepObj.sizeY, jeepObj.sizeZ)
-
-        # Light Settings
-        headlightColor = [1.5, 1.5, 1.5, 1.0] # Increased brightness
-        glLightfv(GL_LIGHT1, GL_DIFFUSE, headlightColor)
-        glLightfv(GL_LIGHT1, GL_SPECULAR, headlightColor)
-
-        # --- FIX 1: RAISE THE POSITION ---
-        # Old: [0.0, 0.0, 3.5, 1.0]
-        # New: [0.0, 1.0, 3.0, 1.0] 
-        # We lift Y to 1.0 so it's high enough to shine DOWN.
-        lightPos = [0.0, 1.0, 3.0, 1.0] 
-        glLightfv(GL_LIGHT1, GL_POSITION, lightPos)
-
-        # --- FIX 2: TILT THE DIRECTION DOWN ---
-        # Old: [0.0, -0.2, 1.0] (Mostly forward)
-        # New: [0.0, -1.0, 1.0] (45 degrees down)
-        # This forces the light to hit the road geometry.
-        spotDir = [0.0, -1.0, 1.0] 
-        glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, spotDir)
-
-        # --- FIX 3: WIDEN THE BEAM ---
-        # Old: 30.0
-        # New: 60.0 (Wider cone covers more road)
-        glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 60.0)
-        glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 2.0) # Lower exponent = softer edge
+        drawDisplayModeEnvironment()
         
-        # Attenuation (Keep this low so it reaches the ground)
-        glLightf(GL_LIGHT1, GL_CONSTANT_ATTENUATION, 0.1)
-        glLightf(GL_LIGHT1, GL_LINEAR_ATTENUATION, 0.01)
-        glPopMatrix()
+        # Draw Jeep
+        jeepObj.draw()
+        jeepObj.drawW1()
+        jeepObj.drawW2()
+        
+        # Show text
+        glDisable(GL_LIGHTING)
+        glColor3f(0.0, 1.0, 1.0)
+        
+        mode_name = "Ambient"
+        if lightMode == 1: mode_name = "Point (Omni)"
+        elif lightMode == 2: mode_name = "Directional (Sun)"
+        elif lightMode == 3: mode_name = "Spotlight (Flashlight)"
+            
+        text3d(f"Display Mode: {mode_name}", -2.0, 4.0, 0.0)
+        
     else:
-        glDisable(GL_LIGHT1)
+        # === GAME MODE ===
+        
+        # Headlight Logic
+        if jeepObj.lightOn and lightMode != 0: 
+            glEnable(GL_LIGHT1)
+            glPushMatrix()
+            glTranslatef(jeepObj.posX, jeepObj.posY, jeepObj.posZ)
+            glRotatef(jeepObj.rotation, 0.0, 1.0, 0.0)
+            glScalef(jeepObj.sizeX, jeepObj.sizeY, jeepObj.sizeZ)
+            headlightColor = [1.5, 1.5, 1.5, 1.0]
+            glLightfv(GL_LIGHT1, GL_DIFFUSE, headlightColor)
+            glLightfv(GL_LIGHT1, GL_SPECULAR, headlightColor)
+            lightPos = [0.0, 1.0, 3.0, 1.0] 
+            glLightfv(GL_LIGHT1, GL_POSITION, lightPos)
+            spotDir = [0.0, -1.0, 1.0] 
+            glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, spotDir)
+            glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 60.0)
+            glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 2.0)
+            glLightf(GL_LIGHT1, GL_CONSTANT_ATTENUATION, 0.1)
+            glLightf(GL_LIGHT1, GL_LINEAR_ATTENUATION, 0.01)
+            glPopMatrix()
+        else:
+            glDisable(GL_LIGHT1)
 
-    # --- 3. GAME LOGIC (Text) ---
-    beginTime = 6-score
-    countTime = score-6
-    if (score <= 5):
-        canStart = False
-        glColor3f(1.0,0.0,1.0)
-        text3d("Begins in: "+str(beginTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
-    elif (score == 6):
-        canStart = True
-        glColor(1.0,0.0,1.0)
-        text3d("GO!", jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
-    else:
-        canStart = True
-        glColor3f(0.0,1.0,1.0)
-        text3d("Scoring: "+str(countTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
+        # Game Text
+        beginTime = 6-score
+        countTime = score-6
+        if (score <= 5):
+            canStart = False
+            glColor3f(1.0,0.0,1.0)
+            text3d("Begins in: "+str(beginTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
+        elif (score == 6):
+            canStart = True
+            glColor(1.0,0.0,1.0)
+            text3d("GO!", jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
+        else:
+            canStart = True
+            glColor3f(0.0,1.0,1.0)
+            text3d("Scoring: "+str(countTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
 
-    # --- 4. DRAW SCENE (The Road) ---
-    # Because the Headlight was set up in step 2, the road will now light up!
-    for obj in objectArray:
-        obj.draw()
+        # Draw Scene Objects
+        for obj in objectArray:
+            obj.draw()
 
-    # --- 5. DRAW OBJECTS ---
-    glDisable(GL_LIGHTING) 
-    ribbonObj.draw() 
-    if lightMode != 0:
-        glEnable(GL_LIGHTING)
+        glDisable(GL_LIGHTING) 
+        ribbonObj.draw() 
+        if lightMode != 0:
+            glEnable(GL_LIGHTING)
 
-    tunnelObj.draw()
+        tunnelObj.draw()
 
-    for cone in allcones:
-        cone.draw()
+        for cone in allcones:
+            cone.draw()
 
-    for star in allstars:
-        star.draw()
+        for star in allstars:
+            star.draw()
 
-    jeepObj.draw()
-    jeepObj.drawW1()
-    jeepObj.drawW2()
-    jeepObj.drawLight()
+        jeepObj.draw()
+        jeepObj.drawW1()
+        jeepObj.drawW2()
+        jeepObj.drawLight()
+    
     glPopMatrix()
     glutSwapBuffers()
 
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
     global aiStar, aiStarSpeed, aiStarDir, lightMode
-    # (No ribbon globals needed here anymore)
-
-    # --- Handle Time and Score ---
+    
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
     prevTime = curTime
-    score = curTime/1000
+    
+    if currentMode == MODE_GAME:
+        score = curTime/1000
+    else:
+        score = 0 
 
-    if tickTime == 0: # Avoid issues if frame is too fast
+    if tickTime == 0: 
         glutPostRedisplay()
         return
 
-    # --- NEW: Handle Boost Logic ---
     seconds_passed = tickTime / 1000.0
     
-    # Call the ribbon's update method
-    # It needs the time delta and the jeep's Z position
-    boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ)
-    
-    # React to the returned state changes
-    if boost_on:
-        moveSpeed = BOOST_SPEED
-        rotSpeed = BOOST_ROT_SPEED
-        # print("Boost ON!") # Optional: for debugging
-    elif boost_off:
-        moveSpeed = NORMAL_SPEED
-        rotSpeed = NORMAL_ROT_SPEED
-        # print("Boost OFF!") # Optional: for debugging
-    # --- End Boost Logic ---
+    if currentMode == MODE_GAME:
+        # Game Logic
+        boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ)
+        if boost_on:
+            moveSpeed = BOOST_SPEED
+            rotSpeed = BOOST_ROT_SPEED
+        elif boost_off:
+            moveSpeed = NORMAL_SPEED
+            rotSpeed = NORMAL_ROT_SPEED
 
+        if canStart:
+            moveAmount = moveSpeed * seconds_passed
+            rotAmount = rotSpeed * seconds_passed
 
-    # --- Handle Movement Logic ---
-    if canStart:
-        # 1. Calculate frame-independent movement/rotation amounts
-        #    (These now use moveSpeed/rotSpeed, which might be boosted)
+            if keyState['up']:
+                jeepObj.move(False, moveAmount)
+                jeepObj.wheelDir = 'fwd'
+            elif keyState['down']:
+                jeepObj.move(False, -moveAmount)
+                jeepObj.wheelDir = 'back'
+            else:
+                jeepObj.wheelDir = 'stop'
+
+            if keyState['left']:
+                jeepObj.move(True, rotAmount)
+            elif keyState['right']:
+                jeepObj.move(True, -rotAmount)
+        
+        for s in allstars:
+            s.update(seconds_passed) 
+            moveAmount = s.speed * seconds_passed
+            s.posX += moveAmount * s.direction
+            if s.posX > land - 5:
+                s.posX = land - 5
+                s.direction = -1
+                s.hit()
+            elif s.posX < -land + 5:
+                s.posX = -land + 5
+                s.direction = 1
+                s.hit()
+
+        if jeepObj.wheelDir == 'fwd':
+            jeepObj.rotateWheel(-0.1 * tickTime)
+        elif jeepObj.wheelDir == 'back':
+            jeepObj.rotateWheel(0.1 * tickTime)
+
+    elif currentMode == MODE_DISPLAY:
+        # Display Mode Logic
         moveAmount = moveSpeed * seconds_passed
         rotAmount = rotSpeed * seconds_passed
-
-        # 2. Handle Forward/Backward Movement
+        
         if keyState['up']:
-            jeepObj.move(False, moveAmount) # Move forward
+            jeepObj.move(False, moveAmount)
             jeepObj.wheelDir = 'fwd'
         elif keyState['down']:
-            jeepObj.move(False, -moveAmount) # Move backward
+            jeepObj.move(False, -moveAmount)
             jeepObj.wheelDir = 'back'
         else:
             jeepObj.wheelDir = 'stop'
 
-        # 3. Handle Rotation
         if keyState['left']:
-            jeepObj.move(True, rotAmount) # Rotate left (positive)
+            jeepObj.move(True, rotAmount)
         elif keyState['right']:
-            jeepObj.move(True, -rotAmount) # Rotate right (negative)
+            jeepObj.move(True, -rotAmount)
+            
+        if jeepObj.wheelDir == 'fwd':
+            jeepObj.rotateWheel(-0.1 * tickTime)
+        elif jeepObj.wheelDir == 'back':
+            jeepObj.rotateWheel(0.1 * tickTime)
     
-    # --- Handle AI Star Movement (Reacts to Light) ---
-    for s in allstars:
-        # 1. Update the star's internal timer (for 'hit' color)
-        s.update(seconds_passed) # <--- MODIFIED
-        
-        # 2. Calculate frame-independent move amount for this star
-        moveAmount = s.speed * seconds_passed
-        
-        # 3. Update this star's position
-        s.posX += moveAmount * s.direction
-        
-        # 4. Check patrol bounds, reverse direction, and trigger 'hit'
-        if s.posX > land - 5:
-            s.posX = land - 5
-            s.direction = -1
-            s.hit() # <--- MODIFIED
-        elif s.posX < -land + 5:
-            s.posX = -land + 5
-            s.direction = 1
-            s.hit() # <--- MODIFIED
-
-    # --- Handle Wheel Spinning ---
-    if jeepObj.wheelDir == 'fwd':
-        jeepObj.rotateWheel(-0.1 * tickTime) # Keep original spin speed
-    elif jeepObj.wheelDir == 'back':
-        jeepObj.rotateWheel(0.1 * tickTime)
-    
-    # --- Redraw ---
     glutPostRedisplay()
     
 
@@ -438,37 +527,28 @@ def idle():
 def setView():
     global eyeX, eyeY, eyeZ, windowWidth, windowHeight
     
-    # --- 1. Set the PROJECTION Matrix ---
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
 
-    # Avoid division by zero
     if windowHeight == 0:
         windowHeight = 1
     
     aspect = float(windowWidth) / float(windowHeight)
-    gluPerspective(90, aspect, 0.1, 1000.0)  # extend far plane a bit for zoomed-out views
+    gluPerspective(90, aspect, 0.1, 1000.0)
 
-    # --- 2. Set the MODELVIEW Matrix ---
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
 
-    # --- 3. Set the Camera (View) ---
     if topView:
-        # Use radius as the camera height (zoom in/out changes height)
         eye_x = jeepObj.posX
-        eye_y = max(1.0, radius)  # keep a minimum height
+        eye_y = max(1.0, radius)
         eye_z = jeepObj.posZ
         center_x = jeepObj.posX
         center_y = jeepObj.posY
         center_z = jeepObj.posZ
-        # Up vector points along +Z for a true top-down on XZ ground plane
         gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 0.0, 1.0)
 
     elif behindView:
-        # Use radius to control how far and how high the camera is
-        # Split radius into behind and above components for a natural chase-cam
-        # Tune these weights to taste
         behind_fraction = 0.8
         above_fraction  = 0.4
         behind_dist = max(1.0, radius * behind_fraction)
@@ -486,9 +566,6 @@ def setView():
         gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 1.0, 0.0)
 
     else:
-        # Default orbit camera around the jeep using angle/phi/radius
-        # recalculateEyePos() already sets eyeX/eyeY/eyeZ from radius/angle/phi
-        # Make sure those are up-to-date when this path is used.
         gluLookAt(eyeX, eyeY, eyeZ,
                   jeepObj.posX, jeepObj.posY, jeepObj.posZ,
                   0.0, 1.0, 0.0)
@@ -496,9 +573,6 @@ def setView():
     glutPostRedisplay()
 
 def setObjView():
-    # things to do
-    # realize a view following the jeep
-    # refer to setview
     pass
 
 #-------------------------------------------user inputs------------------
@@ -519,28 +593,26 @@ def motionHandle(x,y):
         nowY = y
 
         if (nowX - pastX > 0):
-            angle -= mouseSensitivity # Adjust sensitivity
+            angle -= mouseSensitivity 
         elif (nowX - pastX < 0):
             angle += mouseSensitivity
         
-        if (nowY - pastY > 0): # Mouse moved down
-            phi += mouseSensitivity # <-- MODIFIED LINE
-        elif (nowY - pastY < 0): # Mouse moved up
-            phi -= mouseSensitivity # <-- MODIFIED LINE
+        if (nowY - pastY > 0): 
+            phi += mouseSensitivity 
+        elif (nowY - pastY < 0): 
+            phi -= mouseSensitivity 
 
-        # Clamp phi to prevent the camera from flipping over the top or bottom
         if (phi > math.pi / 2.0 - 0.01):
             phi = math.pi / 2.0 - 0.01
         if (phi < -math.pi / 2.0 + 0.01):
             phi = -math.pi / 2.0 + 0.01
 
-        recalculateEyePos() # Update camera position
+        recalculateEyePos() 
 
     if centered == False:
         setView()
     elif centered == True:
         setObjView()
-
 
 
 def specialKeys(keypress, mX, mY):
@@ -569,8 +641,6 @@ def myKeyboard(key, mX, mY):
     global eyeX, eyeY, eyeZ, angle, radius, helpWindow, centered, helpWin, overReason, topView, behindView, phi, jeepObj
     
     if key == b'h':
-        # ... (your existing help window logic) ...
-        print ("h pushed"+ str(helpWindow))
         winNum = glutGetWindow()
         if helpWindow == False:
             helpWindow = True
@@ -585,92 +655,79 @@ def myKeyboard(key, mX, mY):
             helpWindow = False
             print (glutGetWindow())
             glutHideWindow()
-            #glutDestroyWindow(helpWin)
             glutMainLoop()
 
-    # --- Object Controls ---
-    elif key == b' ': # Spacebar
-        jeepObj.wheelDir = 'stop' # Stop the wheels
+    elif key == b' ': 
+        jeepObj.wheelDir = 'stop' 
     elif key == b'+' or key == b'=':
         jeepObj.sizeX += 0.1
         jeepObj.sizeY += 0.1
         jeepObj.sizeZ += 0.1
     elif key == b'-' or key == b'_':
-        if jeepObj.sizeX > 0.2: # Add check to prevent negative scale
+        if jeepObj.sizeX > 0.2: 
             jeepObj.sizeX -= 0.1
             jeepObj.sizeY -= 0.1
             jeepObj.sizeZ -= 0.1
 
-    # --- Camera Controls ---
-    elif key == b'z': # Zoom in
+    elif key == b'z': 
         radius -= 0.5
-        if radius < 1.0: radius = 1.0 # Don't go inside the origin
+        if radius < 1.0: radius = 1.0 
         recalculateEyePos()
-    elif key == b'x': # Zoom out
+    elif key == b'x': 
         radius += 0.5
         recalculateEyePos()
     
-    elif key == b't': # Top View
+    elif key == b't': 
         topView = not topView
         behindView = False
-    elif key == b'b': # Behind View
+    elif key == b'b': 
         behindView = not behindView
         topView = False
-    elif key == b'c': # Center (Default) View
+    elif key == b'c': 
         behindView = False
         topView = False
-        # Reset camera to default
         eyeX = 0.0
         eyeY = 2.0
         eyeZ = 10.0
         angle = 0.0
         radius = 10.0
         phi = 0.0
-
         recalculateEyePos()
 
-    elif key == b'l': # 'l' for Lights
+    elif key == b'l': 
         jeepObj.toggleLight()
 
-    setView() # Update the view after a keypress
-    # things can do
-    # this is the part to set special functions, such as help window.
+    setView()
 
 def menuFunc(value):
     global lightMode, isFullScreen, windowWidth, windowHeight
     global prevWidth, prevHeight, prevPosX, prevPosY
 
-    if 0 <= value <= 3: # Lighting options
+    if 0 <= value <= 3: 
         print(f"Lighting mode set to: {value}")
         lightMode = value
     
-    # --- Resolution Options ---
-    elif value == 101: # 600x600
+    elif value == 101: 
         if not isFullScreen:
             glutReshapeWindow(600, 600)
     
-    elif value == 102: # 800x800
+    elif value == 102: 
         if not isFullScreen:
             glutReshapeWindow(800, 800)
 
-    elif value == 103: # 1024x768
+    elif value == 103: 
         if not isFullScreen:
             glutReshapeWindow(1024, 768)
 
-    # --- Fullscreen Toggle ---
     elif value == 200:
         if not isFullScreen:
-            # Save current window state
             prevWidth = windowWidth
             prevHeight = windowHeight
             prevPosX = glutGet(GLUT_WINDOW_X)
             prevPosY = glutGet(GLUT_WINDOW_Y)
-            
-            # Go fullscreen
             glutFullScreen()
             isFullScreen = True
         else:
-            # Restore previous window state
             glutReshapeWindow(prevWidth, prevHeight)
             glutPositionWindow(prevPosX, prevPosY)
             isFullScreen = False
@@ -679,7 +736,7 @@ def menuFunc(value):
     return 0
 
 #-------------------------------------------------tools----------------------       
-def drawTextBitmap(string, x, y): #for writing text to display
+def drawTextBitmap(string, x, y): 
     glRasterPos2f(x, y)
     for char in string:
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
@@ -698,29 +755,18 @@ def dist(pt1, pt2):
 
 def recalculateEyePos():
     global eyeX, eyeY, eyeZ, radius, angle, phi
-
-    # 1. Calculate the *offset* from the center point
     offsetX = radius * math.cos(phi) * math.sin(angle)
     offsetY = radius * math.sin(phi)
     offsetZ = radius * math.cos(phi) * math.cos(angle)
-    
-    # 2. Add that offset to the jeep's current position
     eyeX = jeepObj.posX + offsetX
     eyeY = jeepObj.posY + offsetY
     eyeZ = jeepObj.posZ + offsetZ
 
 def reshape(w, h):
     global windowWidth, windowHeight
-    
-    # Store new dimensions
     windowWidth = w
     windowHeight = h
-    
-    # Set the viewport to cover the new window
     glViewport(0, 0, w, h)
-    
-    # Since the projection matrix depends on the aspect ratio,
-    # we need to update it. The easiest way is to call setView().
     setView()
 
 #--------------------------------------------making game more complex--------
@@ -729,20 +775,17 @@ def addCone(x,z):
     obstacleCoord.append((x,z))
 
 def addStar(x,z):
-    # Create the star object first
     new_star = star.star(x,z)
-    
     new_star.posY = 2.0 
-
     new_star.speed = random.uniform(3.0, 7.0) 
     new_star.direction = random.choice([1, -1])
-    # -----------------------
-    
     allstars.append(new_star)
     rewardCoord.append((x,z))
 
 def collisionCheck():
     global overReason, score, usedDiamond, countTime
+    if currentMode != MODE_GAME: return 
+
     for obstacle in obstacleCoord:
         if dist((jeepObj.posX, jeepObj.posZ), obstacle) <= ckSense:
             overReason = "You hit an obstacle!"
@@ -751,10 +794,6 @@ def collisionCheck():
         overReason = "You ran off the road!"
         gameOver()
 
-    # if (dist((jeepObj.posX, jeepObj.posZ), (diamondObj.posX, diamondObj.posZ)) <= ckSense and usedDiamond ==False):
-    #     print ("Diamond bonus!")
-    #     countTime /= 2
-    #     usedDiamond = True
     if (jeepObj.posZ >= land*gameEnlarge):
         gameSuccess()
         
@@ -772,7 +811,6 @@ def gameOver():
     global finalScore
     print ("Game completed!")
     finalScore = score-6
-    #recordGame() #add to excel
     glutHideWindow()
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
     glutInitWindowSize(windowWidth, windowHeight)
@@ -785,7 +823,6 @@ def gameSuccess():
     global finalScore
     print ("Game success!")
     finalScore = score-6
-    #recordGame() #add to excel
     glutHideWindow()
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
     glutInitWindowSize(200,200)
@@ -822,11 +859,9 @@ def overScreen():
 def showHelp():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     
-    # Title
     glColor3f(1.0, 0.0, 0.0)
     drawTextBitmap("Help Guide" , -0.2, 0.85)
     
-    # --- Jeep Controls ---
     glColor3f(0.0, 1.0, 0.0)
     drawTextBitmap("Jeep Controls:", -0.9, 0.7) 
     glColor3f(1.0, 1.0, 1.0)
@@ -835,7 +870,6 @@ def showHelp():
     drawTextBitmap("Spacebar: Stop wheel rotation (Brake)", -0.8, 0.4)
     drawTextBitmap("'+' / '-': Increase / Decrease Jeep Size", -0.8, 0.3)
 
-    # --- Camera Controls ---
     glColor3f(0.0, 1.0, 0.0)
     drawTextBitmap("Camera Controls:", -0.9, 0.1)
     glColor3f(1.0, 1.0, 1.0)
@@ -845,7 +879,6 @@ def showHelp():
     drawTextBitmap("'b': Toggle Behind-Jeep View", -0.8, -0.3)
     drawTextBitmap("'c': Reset Camera to Default (orbits jeep)", -0.8, -0.4) 
 
-    # --- Other Controls ---
     glColor3f(0.0, 1.0, 0.0)
     drawTextBitmap("Other:", -0.9, -0.6)
     glColor3f(1.0, 1.0, 1.0)
@@ -861,13 +894,13 @@ def loadTexture(imageName):
     try:
         imgX = texturedImage.size[0]
         imgY = texturedImage.size[1]
-        img = texturedImage.tobytes("raw","RGBX",0,-1)#tostring("raw", "RGBX", 0, -1)
+        img = texturedImage.tobytes("raw","RGBX",0,-1)
     except Exception:
         print ("Error:")
         print ("Switching to RGBA mode.")
         imgX = texturedImage.size[0]
         imgY = texturedImage.size[1]
-        img = texturedImage.tobytes("raw","RGB",0,-1)#tostring("raw", "RGBA", 0, -1)
+        img = texturedImage.tobytes("raw","RGB",0,-1)
 
     tempID = glGenTextures(1)
     glBindTexture(GL_TEXTURE_2D, tempID)
@@ -891,71 +924,62 @@ def initializeLight():
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~the finale!!!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def show_launcher():
-    global windowWidth, windowHeight, isFullScreen
+    global windowWidth, windowHeight, isFullScreen, currentMode
 
-    # This function is called when the "Start" button is clicked
     def start_game():
-        global windowWidth, windowHeight, isFullScreen
+        global windowWidth, windowHeight, isFullScreen, currentMode
         
-        # Get the selected option (e.g., "800x800" or "Start in Fullscreen")
-        selection = selection_var.get()
-
-        if selection == "Start in Fullscreen":
+        # 1. Resolution / Fullscreen
+        res_selection = resolution_var.get()
+        if res_selection == "Start in Fullscreen":
             isFullScreen = True
-            # We must set a default windowed size for the "Toggle Fullscreen"
-            # menu option to work correctly.
-            windowWidth = 800  # Default windowed size
-            windowHeight = 600 # Default windowed size
+            windowWidth = 800  
+            windowHeight = 600 
         else:
             isFullScreen = False
-            # Parse the resolution string (e.g., "600x600")
-            w, h = selection.split('x')
+            w, h = res_selection.split('x')
             windowWidth = int(w)
             windowHeight = int(h)
+
+        # 2. Game Mode Selection
+        mode_selection = mode_var.get()
+        if mode_selection == "Display Mode (Lighting Test)":
+            currentMode = MODE_DISPLAY
+            print("Starting in Display Mode")
+        else:
+            currentMode = MODE_GAME
+            print("Starting in Game Mode")
         
-        # Close the launcher window and continue the script
         root.destroy()
 
-    # --- Create the main Tkinter window ---
     root = tk.Tk()
-    root.title("Game Settings")
+    root.title("Game Launcher")
 
-    # --- Create a variable to hold the single selection ---
-    # We set a default selection
-    selection_var = tk.StringVar(value="800x800") 
-
-    # --- Create the UI elements ---
     frame = ttk.Frame(root, padding="20")
     frame.grid(row=0, column=0)
     
-    ttk.Label(frame, text="Select Display Mode:").grid(row=0, column=0, sticky=tk.W, pady=5)
+    # --- Section 1: Mode Selection ---
+    ttk.Label(frame, text="Select Game Mode:", font=('Helvetica', 10, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=(0,5))
+    mode_var = tk.StringVar(value="Game Mode (Racing)")
     
-    # All display options, including fullscreen
-    display_options = [
-        "600x600", 
-        "800x800", 
-        "1024x768", 
-        "1280x720", 
-        "Start in Fullscreen"
-    ]
+    modes = ["Game Mode (Racing)", "Display Mode (Lighting Test)"]
+    for i, m in enumerate(modes):
+        ttk.Radiobutton(frame, text=m, variable=mode_var, value=m).grid(row=i+1, column=0, sticky=tk.W, padx=20)
+
+    ttk.Separator(frame, orient='horizontal').grid(row=3, column=0, sticky="ew", pady=10)
+
+    # --- Section 2: Resolution Selection ---
+    ttk.Label(frame, text="Select Resolution:", font=('Helvetica', 10, 'bold')).grid(row=4, column=0, sticky=tk.W, pady=(0,5))
+    resolution_var = tk.StringVar(value="800x800") 
     
-    # Create a radio button for each option
+    display_options = ["600x600", "800x800", "1024x768", "Start in Fullscreen"]
     for i, option in enumerate(display_options):
-        ttk.Radiobutton(
-            frame, 
-            text=option, 
-            variable=selection_var, 
-            value=option
-        ).grid(row=i+1, column=0, sticky=tk.W, padx=20)
+        ttk.Radiobutton(frame, text=option, variable=resolution_var, value=option).grid(row=5+i, column=0, sticky=tk.W, padx=20)
 
-    # Start button (moved down slightly)
-    ttk.Button(frame, text="Start Game", command=start_game).grid(row=len(display_options)+1, column=0, pady=10)
+    # Start Button
+    ttk.Button(frame, text="Start Application", command=start_game).grid(row=10, column=0, pady=20)
 
-    # --- Center the window and run it ---
     root.eval('tk::PlaceWindow . center')
-    
-    # This runs the Tkinter window. The script will *pause* here
-    # until the window is destroyed (by clicking the button).
     root.mainloop()
 
 def main():
@@ -967,28 +991,20 @@ def main():
     prevTime = glutGet(GLUT_ELAPSED_TIME)
     
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
-    # things to do
-    # change the window resolution in the game
     glutInitWindowSize(windowWidth, windowHeight)
-    
     glutInitWindowPosition(0, 0)
     mainWin = glutCreateWindow(b'CS4182')
 
-    # --- CHECK FOR FULLSCREEN ---
-    # If the user checked the fullscreen box in the launcher,
-    # we enter fullscreen mode immediately.
     if isFullScreen:
-        # We still save the windowed-mode dimensions
-        # so the "Toggle Fullscreen" menu option works correctly.
+        global prevWidth, prevHeight, prevPosX, prevPosY
         prevWidth = windowWidth
         prevHeight = windowHeight
         prevPosX = glutGet(GLUT_WINDOW_X)
         prevPosY = glutGet(GLUT_WINDOW_Y)
         glutFullScreen()
-    # ----------------------------
 
     glutDisplayFunc(display)
-    glutIdleFunc(idle)#wheel turn
+    glutIdleFunc(idle)
 
     setView()
     glLoadIdentity()
@@ -1000,29 +1016,24 @@ def main():
     glutSpecialUpFunc(specialKeysUp)
     glutKeyboardFunc(myKeyboard)
     glutReshapeFunc(reshape)
-    # things to do
-    # add a menu 
 
-    # Create a sub-menu for lighting
+    # Sub-menus
     lightMenu = glutCreateMenu(menuFunc)
     glutAddMenuEntry("Ambient Light", 0)
     glutAddMenuEntry("Point Light", 1)
     glutAddMenuEntry("Directional Light", 2)
     glutAddMenuEntry("Spotlight", 3)
 
-    # Create a sub-menu for resolution
     resMenu = glutCreateMenu(menuFunc)
     glutAddMenuEntry("600 x 600", 101)
     glutAddMenuEntry("800 x 800", 102)
     glutAddMenuEntry("1024 x 768", 103)
 
-    # Create the main menu
     glutCreateMenu(menuFunc)
     glutAddSubMenu("Lighting", lightMenu)
     glutAddSubMenu("Resolution", resMenu)
-    glutAddMenuEntry("Toggle Fullscreen", 200) # Add toggle option
+    glutAddMenuEntry("Toggle Fullscreen", 200)
 
-    # Attach the main menu to the right mouse button
     glutAttachMenu(GLUT_RIGHT_BUTTON)
 
     loadSceneTextures()
@@ -1030,18 +1041,13 @@ def main():
     jeep1Obj.makeDisplayLists()
     jeep2Obj.makeDisplayLists()
     jeep3Obj.makeDisplayLists()
-    #personObj.makeDisplayLists()
 
-    # things to do
-    # add a automatic object
-    for i in range(coneAmount):#create cones randomly for obstacles, making sure to give a little lag time in beginning by adding 10.0 buffer
+    # Populate objects (Game Mode specific mostly)
+    for i in range(coneAmount):
         addCone(random.randint(-land, land), random.randint(10.0, land*gameEnlarge))
 
-    # Add the original "aiStar" to the allstars list
     addStar(-land + 5, 10) 
-    
-    # Create the other random stars
-    for i in range(starAmount):#create stars randomly for rewards
+    for i in range(starAmount):
         addStar(random.randint(-land, land), random.randint(10.0, land*gameEnlarge))
 
     for cone in allcones:
@@ -1050,14 +1056,9 @@ def main():
     for star in allstars:
         star.makeDisplayLists()
     
-    # diamondObj.makeDisplayLists()
-    
     staticObjects()
     if (applyLighting == True):
         initializeLight()
     glutMainLoop()
-
-
-
     
 main()
