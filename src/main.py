@@ -45,6 +45,7 @@ mainWin = 0
 centered = False
 
 gameStartTime = 0.0
+GAME_DURATION = 120.0
 beginTime = 0
 countTime = 0
 score = 0
@@ -527,8 +528,23 @@ def display():
         # Text
         glDisable(GL_LIGHTING)
         
-        glColor3f(0.0, 1.0, 1.0) # Cyan
-        text3d("Score: " + str(int(score)), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
+        if timeLeft <= 0:
+            # --- GAME OVER (Red) ---
+            glColor3f(1.0, 0.0, 0.0) 
+            text3d("GAME OVER", jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
+        else:
+            # --- TIMER (Cyan) ---
+            glColor3f(0.0, 1.0, 1.0)
+            
+            # Format minutes and seconds (MM:SS)
+            mins = int(timeLeft // 60)
+            secs = int(timeLeft % 60)
+            timer_text = "Time left: {:02d}:{:02d}".format(mins, secs)
+            
+            text3d(timer_text, jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
+
+        if lightMode != 0:
+            glEnable(GL_LIGHTING)
 
         if lightMode != 0:
             glEnable(GL_LIGHTING)
@@ -653,17 +669,28 @@ def updateIntro(dt):
 
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
-    global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime
+    global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime, timeLeft
     
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
     prevTime = curTime
     
     if currentMode == MODE_GAME:
-        # --- NEW: Calculate Score relative to Game Start ---
-        score = (curTime / 1000.0) - gameStartTime
+        # Calculate elapsed time
+        elapsed = (curTime / 1000.0) - gameStartTime
+        
+        # Calculate Time Left
+        timeLeft = GAME_DURATION - elapsed
+        
+        # Check for Game Over
+        if timeLeft <= 0:
+            timeLeft = 0
+            canStart = False         # Lock movement
+            jeepObj.wheelDir = 'stop' # Stop wheels visually
+            
+        score = timeLeft # Keep score variable synced just in case
     else:
-        score = 0
+        timeLeft = GAME_DURATION # Reset timer when not playing
 
     if tickTime == 0: 
         glutPostRedisplay()
