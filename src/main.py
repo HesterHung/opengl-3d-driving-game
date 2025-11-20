@@ -53,6 +53,9 @@ finalScore = 0
 canStart = False
 overReason = ""
 
+stars_collected = 0
+STARS_TO_WIN = 10
+
 #for wheel spinning
 tickTime = 0
 
@@ -101,7 +104,7 @@ gameEnlarge = 10
 
 #concerned with obstacles (cones) & rewards (stars)
 coneAmount = 15
-starAmount = 5 
+starAmount = 20 
 diamondAmount = 1 
 usedDiamond = False
 
@@ -162,6 +165,22 @@ matShininess  = 100.0
 
 
 #--------------------------------------developing scene---------------
+def drawGUIStar(x, y, radius):
+    """ Draws a 2D yellow star at screen coordinates (x,y) """
+    glPushMatrix()
+    glTranslatef(x, y, 0)
+    glScalef(radius, radius, 1.0)
+    
+    glColor3f(1.0, 0.8, 0.0) # Gold/Yellow
+    glBegin(GL_TRIANGLE_FAN)
+    glVertex2f(0.0, 0.0) # Center
+    for i in range(11):
+        angle = math.radians(i * 36)
+        r = 1.0 if i % 2 == 0 else 0.4
+        glVertex2f(r * math.sin(angle), r * math.cos(angle))
+    glEnd()
+    glPopMatrix()
+
 class Scene:
     axisColor = (0.5, 0.5, 0.5, 0.5)
     axisLength = 50   # Extends to positive and negative on all axes
@@ -598,6 +617,41 @@ def display():
         jeepObj.drawLight()
         glPopMatrix() # <--- CRITICAL: Pop matrix from jeepObj.draw()
     
+        # --- NEW: STAR SCOREBOARD (Top Left) ---
+        # 1. Switch to 2D Overlay Mode
+        glDisable(GL_LIGHTING) # Disable lighting so text is bright white
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(0, windowWidth, 0, windowHeight)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glDisable(GL_DEPTH_TEST) # Ensure HUD draws on top of everything
+
+        # 2. Draw Star Icon (Yellow)
+        # Position: x=30, y=Top-30
+        drawGUIStar(30, windowHeight - 30, 20)
+
+        # 3. Draw Score Text (White)
+        glColor3f(1.0, 1.0, 1.0) 
+        score_msg = ": {} / {}".format(stars_collected, STARS_TO_WIN)
+        
+        # Position text next to the star icon
+        glRasterPos2f(55, windowHeight - 38) 
+        for char in score_msg:
+             glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, ord(char))
+
+        # 4. Restore 3D Mode
+        glEnable(GL_DEPTH_TEST)
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        
+        # Re-enable lighting if needed for the next frame
+        if lightMode != 0: glEnable(GL_LIGHTING)
+
     glutSwapBuffers()
 
 def updateIntro(dt):
@@ -670,7 +724,8 @@ def updateIntro(dt):
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
     global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime, timeLeft
-    
+    global stars_collected, STARS_TO_WIN
+
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
     prevTime = curTime
@@ -747,16 +802,26 @@ def idle():
         
         for s in allstars:
             s.update(seconds_passed) 
+            
+            # Move the star
             moveAmount = s.speed * seconds_passed
             s.posX += moveAmount * s.direction
+            
+            # Bounce off walls
             if s.posX > land - 5:
                 s.posX = land - 5
                 s.direction = -1
-                s.hit()
             elif s.posX < -land + 5:
                 s.posX = -land + 5
                 s.direction = 1
-                s.hit()
+
+            if s.posY > 0: 
+                # Check distance to Jeep
+                if dist((jeepObj.posX, jeepObj.posZ), (s.posX, s.posZ)) < (jeepObj.sizeX + 1.0):
+                    # HIT!
+                    s.posY = -100.0 # Hide it underground
+                    stars_collected += 1
+
 
         if jeepObj.wheelDir == 'fwd':
             jeepObj.rotateWheel(-0.1 * tickTime)
@@ -1070,17 +1135,19 @@ def reshape(w, h):
     setView()
 
 def startGameplay():
-    global currentMode, jeepObj, canStart, gameStartTime
+    global currentMode, jeepObj, canStart, gameStartTime, stars_collected
     currentMode = MODE_GAME
     
-    # Reset player position
     jeepObj.posX = 0.0
     jeepObj.posZ = 0.0
     
     canStart = True 
+    stars_collected = 0
     
+    for s in allstars:
+        s.posY = 2.0
+
     gameStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0
-    
     print("Game Started!")
 
 #--------------------------------------------making game more complex--------
