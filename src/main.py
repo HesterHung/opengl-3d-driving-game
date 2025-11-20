@@ -44,6 +44,7 @@ helpWin = 0
 mainWin = 0
 centered = False
 
+gameStartTime = 0.0
 beginTime = 0
 countTime = 0
 score = 0
@@ -525,21 +526,9 @@ def display():
 
         # Text
         glDisable(GL_LIGHTING)
-
-        beginTime = 6-score
-        countTime = score-6
-        if (score <= 5):
-            canStart = False
-            glColor3f(1.0,0.0,1.0)
-            text3d("Begins in: "+str(beginTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
-        elif (score == 6):
-            canStart = True
-            glColor(1.0,0.0,1.0)
-            text3d("GO!", jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
-        else:
-            canStart = True
-            glColor3f(0.0,1.0,1.0)
-            text3d("Scoring: "+str(countTime), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
+        
+        glColor3f(0.0, 1.0, 1.0) # Cyan
+        text3d("Score: " + str(int(score)), jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
 
         if lightMode != 0:
             glEnable(GL_LIGHTING)
@@ -664,16 +653,17 @@ def updateIntro(dt):
 
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
-    global aiStar, aiStarSpeed, aiStarDir, lightMode
+    global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime
     
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
     prevTime = curTime
     
     if currentMode == MODE_GAME:
-        score = curTime/1000
+        # --- NEW: Calculate Score relative to Game Start ---
+        score = (curTime / 1000.0) - gameStartTime
     else:
-        score = 0 
+        score = 0
 
     if tickTime == 0: 
         glutPostRedisplay()
@@ -1053,11 +1043,17 @@ def reshape(w, h):
     setView()
 
 def startGameplay():
-    global currentMode, jeepObj
+    global currentMode, jeepObj, canStart, gameStartTime
     currentMode = MODE_GAME
-    # Reset player position for the actual race
+    
+    # Reset player position
     jeepObj.posX = 0.0
     jeepObj.posZ = 0.0
+    
+    canStart = True 
+    
+    gameStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0
+    
     print("Game Started!")
 
 #--------------------------------------------making game more complex--------
