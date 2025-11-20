@@ -55,6 +55,9 @@ overReason = ""
 
 stars_collected = 0
 STARS_TO_WIN = 10
+star_effect_timer = 0.0
+last_star_x = 0.0
+last_star_z = 0.0
 
 #for wheel spinning
 tickTime = 0
@@ -547,24 +550,12 @@ def display():
         # Text
         glDisable(GL_LIGHTING)
         
+        glDisable(GL_LIGHTING)
         if timeLeft <= 0:
-            # --- GAME OVER (Red) ---
-            glColor3f(1.0, 0.0, 0.0) 
+            glColor3f(1.0, 0.0, 0.0) # Red
+            # Draw "GAME OVER" floating above the jeep
             text3d("GAME OVER", jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
-        else:
-            # --- TIMER (Cyan) ---
-            glColor3f(0.0, 1.0, 1.0)
-            
-            # Format minutes and seconds (MM:SS)
-            mins = int(timeLeft // 60)
-            secs = int(timeLeft % 60)
-            timer_text = "Time left: {:02d}:{:02d}".format(mins, secs)
-            
-            text3d(timer_text, jeepObj.posX, jeepObj.posY + 3.0, jeepObj.posZ)
-
-        if lightMode != 0:
-            glEnable(GL_LIGHTING)
-
+        
         if lightMode != 0:
             glEnable(GL_LIGHTING)
 
@@ -602,7 +593,6 @@ def display():
                 sl.lightID = available_ids[i]
             else:
                 sl.lightID = None
-
             sl.draw() 
 
         # Remaining objects
@@ -615,11 +605,32 @@ def display():
         jeepObj.drawW1()
         jeepObj.drawW2()
         jeepObj.drawLight()
-        glPopMatrix() # <--- CRITICAL: Pop matrix from jeepObj.draw()
+
+        if star_effect_timer > 0:
+            glDisable(GL_LIGHTING) 
+            glDisable(GL_TEXTURE_2D)
+            
+            progress = 1.0 - (star_effect_timer / 0.4) 
+            expansion = 1.5 + (progress * 3.0)
+            
+            glColor4f(1.0, 0.8, 0.0, 1.0 - progress) 
+            
+            glPushMatrix()
+            
+            glTranslatef(last_star_x, 2.0, last_star_z) 
+            
+            glLineWidth(3.0)
+            glutWireSphere(expansion, 10, 10)
+            glLineWidth(1.0)
+            
+            glPopMatrix()
+            
+            if lightMode != 0: glEnable(GL_LIGHTING)
+
+        glPopMatrix() 
     
-        # --- NEW: STAR SCOREBOARD (Top Left) ---
-        # 1. Switch to 2D Overlay Mode
-        glDisable(GL_LIGHTING) # Disable lighting so text is bright white
+        # --- NEW: ENLARGED 2D HUD (Score & Timer) ---
+        glDisable(GL_LIGHTING) 
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
         glLoadIdentity()
@@ -627,29 +638,57 @@ def display():
         glMatrixMode(GL_MODELVIEW)
         glPushMatrix()
         glLoadIdentity()
-        glDisable(GL_DEPTH_TEST) # Ensure HUD draws on top of everything
+        glDisable(GL_DEPTH_TEST) 
 
-        # 2. Draw Star Icon (Yellow)
-        # Position: x=30, y=Top-30
-        drawGUIStar(30, windowHeight - 30, 20)
+        # --- 1. SCOREBOARD (Top Left) ---
+        # Draw Star Icon (Scaled up)
+        drawGUIStar(40, windowHeight - 40, 30)
 
-        # 3. Draw Score Text (White)
+        # Draw Score Text (Stroke Font = Scalable)
         glColor3f(1.0, 1.0, 1.0) 
         score_msg = ": {} / {}".format(stars_collected, STARS_TO_WIN)
         
-        # Position text next to the star icon
-        glRasterPos2f(55, windowHeight - 38) 
+        glPushMatrix()
+        glTranslatef(75, windowHeight - 50, 0) # Position next to star
+        glScalef(0.3, 0.3, 1.0)                # Scale size (0.3 is large)
+        glLineWidth(2.0)                       # Thicker lines
         for char in score_msg:
-             glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, ord(char))
+             glutStrokeCharacter(GLUT_STROKE_ROMAN, ord(char))
+        glPopMatrix()
 
-        # 4. Restore 3D Mode
+        # --- 2. TIMER (Top Right) ---
+        glColor3f(0.0, 1.0, 1.0) # Cyan
+
+        mins = int(timeLeft // 60)
+        secs = int(timeLeft % 60)
+        timer_msg = "Time: {:02d}:{:02d}".format(mins, secs)
+        
+        # Calculate width to align to right
+        timer_scale = 0.3
+        timer_width = 0
+        for char in timer_msg:
+            timer_width += glutStrokeWidth(GLUT_STROKE_ROMAN, ord(char))
+        
+        real_timer_width = timer_width * timer_scale
+        timer_x = windowWidth - real_timer_width - 30 # 30px padding from right
+        
+        glPushMatrix()
+        glTranslatef(timer_x, windowHeight - 50, 0)
+        glScalef(timer_scale, timer_scale, 1.0)
+        glLineWidth(2.0)
+        for char in timer_msg:
+             glutStrokeCharacter(GLUT_STROKE_ROMAN, ord(char))
+        glPopMatrix()
+
+        glLineWidth(1.0) # Reset line width
+        
+        # Restore 3D Mode
         glEnable(GL_DEPTH_TEST)
         glPopMatrix()
         glMatrixMode(GL_PROJECTION)
         glPopMatrix()
         glMatrixMode(GL_MODELVIEW)
         
-        # Re-enable lighting if needed for the next frame
         if lightMode != 0: glEnable(GL_LIGHTING)
 
     glutSwapBuffers()
@@ -724,7 +763,7 @@ def updateIntro(dt):
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
     global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime, timeLeft
-    global stars_collected, STARS_TO_WIN
+    global stars_collected, STARS_TO_WIN, star_effect_timer
 
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
@@ -758,6 +797,9 @@ def idle():
             updateIntro(seconds_passed)
 
     elif currentMode == MODE_GAME:
+
+        if star_effect_timer > 0:
+            star_effect_timer -= seconds_passed
 
         # Game Logic
         boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ)
@@ -816,11 +858,14 @@ def idle():
                 s.direction = 1
 
             if s.posY > 0: 
-                # Check distance to Jeep
                 if dist((jeepObj.posX, jeepObj.posZ), (s.posX, s.posZ)) < (jeepObj.sizeX + 1.0):
-                    # HIT!
-                    s.posY = -100.0 # Hide it underground
+                    
+                    last_star_x = s.posX
+                    last_star_z = s.posZ
+
+                    s.posY = -100.0 
                     stars_collected += 1
+                    star_effect_timer = 0.4
 
 
         if jeepObj.wheelDir == 'fwd':
