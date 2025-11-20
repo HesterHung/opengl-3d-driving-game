@@ -12,7 +12,16 @@ from tkinter import ttk
 # --- Mode Constants ---
 MODE_GAME = 0
 MODE_DISPLAY = 1
+MODE_INTRO = 2
 currentMode = MODE_GAME # Default
+
+# --- Intro Story Variables ---
+introTime = 0.0
+villainStar = star.star(0, 50) # Spawn it further down the road
+villainStar.sizeX = 3.0 # Make it a BIG boss star
+villainStar.sizeY = 3.0
+villainStar.sizeZ = 3.0
+villainStar.posY = 10.0 # Start high in the air
 
 # windowSize = 600
 windowWidth = 600
@@ -45,7 +54,6 @@ jeep3Obj = jeep.jeep('r')
 allJeeps = [jeep1Obj, jeep2Obj, jeep3Obj]
 jeepNum = 0
 jeepObj = allJeeps[jeepNum]
-#personObj = person.person(10.0,10.0)
 
 #concerned with camera
 eyeX = 0.0
@@ -70,9 +78,8 @@ gameEnlarge = 10
 
 #concerned with obstacles (cones) & rewards (stars)
 coneAmount = 15
-starAmount = 5 #val = -10 pts
-diamondAmount = 1 #val = deducts entire by 1/2
-# diamondObj = diamond.diamond(random.randint(-land, land), random.randint(10.0, land*gameEnlarge))
+starAmount = 5 
+diamondAmount = 1 
 usedDiamond = False
 
 allcones = []
@@ -101,9 +108,8 @@ rotSpeed = 90.0  # Degrees per second
 NORMAL_SPEED = moveSpeed
 NORMAL_ROT_SPEED = rotSpeed
 BOOST_SPEED = 25.0
-BOOST_ROT_SPEED = 120.0 # Make turning a bit faster too
+BOOST_ROT_SPEED = 120.0 
 
-# We pass it the Z position, its length, and the width of the road (`land`)
 ribbonObj = ribbon.ribbon(z_pos=50.0, length=5.0, width=land)
 
 tunnelObj = NurbsLoader.NurbsModel(
@@ -113,8 +119,7 @@ tunnelObj = NurbsLoader.NurbsModel(
     color=(0.4, 0.4, 0.4)
 )
 
-
-#concerned with lighting#########################!!!!!!!!!!!!!!!!##########
+#concerned with lighting
 applyLighting = False
 lightMode = 0  # 0: ambient, 1: point, 2: directional, 3: spot
 
@@ -161,7 +166,6 @@ class Scene:
     def drawLand(self):
         glEnable(GL_TEXTURE_2D)
         
-        # 1. Light Mode Check
         if lightMode == 0:
             glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
         else:
@@ -172,8 +176,6 @@ class Scene:
 
         glBindTexture(GL_TEXTURE_2D, roadTextureID)
 
-        # 2. Define Road Boundaries for Texture Mapping
-        # We need these to calculate the "percentage" of the road we are at
         L = self.landLength
         C = self.cont
         
@@ -185,34 +187,29 @@ class Scene:
         maxZ = C * L
         totalLength = maxZ - minZ
 
-        # 3. Draw the Subdivided Grid
         startZ = minZ
         endZ = maxZ
         startX = minX
         endX = maxX
         
-        step = 2.0  # Tile size
+        step = 2.0
 
         glNormal3f(0.0, 1.0, 0.0) 
 
         glBegin(GL_QUADS)
-        
         z = startZ
         while z < endZ:
             x = startX
             while x < endX:
-                # Grid coordinates
                 x1, z1 = x, z
                 x2, z2 = x + step, z + step
 
-                # Map x and z to a 0.0 - 1.0 range based on the WHOLE road size.
                 u1 = (L - x1) / totalWidth
                 u2 = (L - x2) / totalWidth
 
                 v1 = (maxZ - z1) / totalLength
                 v2 = (maxZ - z2) / totalLength
 
-                # Draw the quad
                 glTexCoord2f(u1, v1); glVertex3f(x1, 0, z1)
                 glTexCoord2f(u1, v2); glVertex3f(x1, 0, z2)
                 glTexCoord2f(u2, v2); glVertex3f(x2, 0, z2)
@@ -220,7 +217,6 @@ class Scene:
                 
                 x += step
             z += step
-            
         glEnd()
 
         glDisable(GL_TEXTURE_2D)
@@ -233,11 +229,6 @@ def staticObjects():
 
 
 def drawDisplayModeEnvironment():
-    """
-    Draws a HIGHLY TESSELLATED square floor. 
-    Tessellation (many small squares) is crucial for Spotlights to work 
-    correctly, as OpenGL fixed-function calculates lighting only at vertices.
-    """
     # Draw Axis
     glColor4f(0.5, 0.5, 0.5, 0.5)
     glBegin(GL_LINES)
@@ -249,18 +240,15 @@ def drawDisplayModeEnvironment():
     glDisable(GL_TEXTURE_2D)
     glNormal3f(0.0, 1.0, 0.0)
     
-    # Set material for lighting
     if lightMode != 0:
-        # Matte gray floor to show lights clearly
         glMaterialfv(GL_FRONT, GL_AMBIENT, [0.2, 0.2, 0.2, 1.0])
         glMaterialfv(GL_FRONT, GL_DIFFUSE, [0.6, 0.6, 0.6, 1.0])
-        glMaterialfv(GL_FRONT, GL_SPECULAR, [0.0, 0.0, 0.0, 1.0]) # No shine on floor
+        glMaterialfv(GL_FRONT, GL_SPECULAR, [0.0, 0.0, 0.0, 1.0]) 
     
     glColor3f(0.6, 0.6, 0.6)
     
-    # --- TESSELLATION LOOP ---
-    floorRadius = 15 # -15 to 15
-    step = 0.5 # Smaller step = more vertices = better spotlight circle
+    floorRadius = 15 
+    step = 0.5 
     
     y = -0.01 
 
@@ -278,15 +266,10 @@ def drawDisplayModeEnvironment():
     glEnd()
 
 def isColliding():
-    # Calculate dynamic hitbox based on Jeep's current size (using sizeX as the scale factor)
     current_hitbox_radius = ckSense * jeepObj.sizeX 
 
-    # Check against Cones
     for obstacle in obstacleCoord: 
-        # Calculate distance between Jeep and Cone
         d = math.sqrt((jeepObj.posX - obstacle[0])**2 + (jeepObj.posZ - obstacle[1])**2)
-        
-        # Check distance against the SCALED radius
         if d <= current_hitbox_radius: 
             return True
             
@@ -311,30 +294,22 @@ def display():
         glDisable(GL_LIGHT0)
     else:
         glEnable(GL_LIGHTING)
-        glEnable(GL_LIGHT0) # Always enable the main light (Sun or Moon)
+        glEnable(GL_LIGHT0) 
 
-        # Default "Sun" settings
         current_light_color = light0_Intensity 
-        light_pos = [0.0, 10.0, 5.0, 1.0] # Default fallback
+        light_pos = [0.0, 10.0, 5.0, 1.0]
 
         if lightMode == 4:
-            # === MODE 4 (Moonlight / Dark) ===
-            # 1. Low Ambient (Base darkness)
+            # Moon Mode
             glLightModelfv(GL_LIGHT_MODEL_AMBIENT, [0.05, 0.05, 0.05, 1.0])
-            
-            # 2. "Moon" Settings (Dim Blue-ish Light)
-            # This ensures the road and tunnel get lit, not just the Jeep
             moon_color = [0.15, 0.15, 0.25, 1.0] 
             current_light_color = moon_color
-            
-            # Position: Directional light from above
             light_pos = [0.0, 10.0, 5.0, 0.0] 
 
         else:
-            # === MODES 1, 2, 3 (Standard Day) ===
+            # Day Modes
             glLightModelfv(GL_LIGHT_MODEL_AMBIENT, [0.2, 0.2, 0.2, 1.0])
             
-            # Position Logic
             if currentMode == MODE_DISPLAY:
                 if lightMode == 1: # Point
                     light_pos = [0.0, 6.0, 0.0, 1.0]
@@ -348,7 +323,6 @@ def display():
                     glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 30.0)
                     glLightf(GL_LIGHT0, GL_SPOT_EXPONENT, 5.0)
                 
-                # Debug Sphere
                 if lightMode != 2:
                     glPushMatrix()
                     glDisable(GL_LIGHTING)
@@ -358,28 +332,91 @@ def display():
                     glEnable(GL_LIGHTING)
                     glPopMatrix()
             else:
-                # Game Mode Positions
                 if lightMode == 2: light_pos = [0.0, 1.0, 1.0, 0.0]
                 elif lightMode == 3: 
                     light_pos = [0.0, 10.0, 0.0, 1.0]
                     glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0])
                     glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 45.0)
 
-        # --- APPLY THE CALCULATED LIGHT SETTINGS ---
         glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
-        
-        # Important: Apply the color we chose (Sun or Moon)
         glLightfv(GL_LIGHT0, GL_DIFFUSE, current_light_color)
         glLightfv(GL_LIGHT0, GL_SPECULAR, current_light_color)
 
     skyObj.draw()
 
     # --- 2. DRAW BASED ON MODE ---
-    if currentMode == MODE_DISPLAY:
+    if currentMode == MODE_INTRO:
+        # === INTRO MODE RENDER ===
+        # Draw Scene (Road, Sky, Tunnel)
+        for obj in objectArray: 
+            obj.draw()
+            
+        glDisable(GL_LIGHTING) 
+        ribbonObj.draw() 
+        if lightMode != 0: glEnable(GL_LIGHTING)
+        
+        tunnelObj.draw()
+
+        # --- NEW: STREETLIGHTS ADDED BACK ---
+        # 1. Calculate distance to current Jeep position
+        light_distances = []
+        for sl in allstreetlights:
+            dist = abs(sl.posZ - jeepObj.posZ)
+            light_distances.append((dist, sl))
+
+        # 2. Sort so closest lights get priority
+        light_distances.sort(key=lambda x: x[0])
+        available_ids = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
+
+        # 3. Reset hardware lights to prevent ghosts
+        for i in available_ids: glDisable(i)
+
+        # 4. Assign IDs and Draw
+        for i, (dist, sl) in enumerate(light_distances):
+            if i < len(available_ids):
+                sl.lightID = available_ids[i]
+            else:
+                sl.lightID = None
+            sl.draw() 
+        # ------------------------------------
+        
+        # Draw Actors
+        jeepObj.draw() 
+        jeepObj.drawW1()
+        jeepObj.drawW2()
+        glPopMatrix() # Pop matrix from jeepObj.draw()
+        
+        jeep2Obj.draw() 
+        jeep2Obj.drawW1()
+        jeep2Obj.drawW2()
+        glPopMatrix() # Pop matrix from jeep2Obj.draw()
+        
+        villainStar.draw() 
+
+        # Draw Subtitles
+        glDisable(GL_LIGHTING)
+        glColor3f(1.0, 1.0, 0.0) 
+        
+        msg = ""
+        if introTime < 3.0: msg = "Just chilling with my friend..."
+        elif introTime < 6.0: msg = "OH NO! A Giant Star appeared!"
+        elif introTime < 9.0: msg = "Leave my friend alone!"
+        else: msg = "THEY TOOK HIM! I MUST SAVE HIM!"
+            
+        text3d(msg, jeepObj.posX, jeepObj.posY + 5.0, jeepObj.posZ)
+        
+        glColor3f(1.0, 1.0, 1.0)
+        text3d("[Press SPACE to Skip]", jeepObj.posX, jeepObj.posY + 6.0, jeepObj.posZ)
+        
+        glEnable(GL_LIGHTING)
+
+    elif currentMode == MODE_DISPLAY:
+        # === DISPLAY MODE RENDER ===
         drawDisplayModeEnvironment()
         jeepObj.draw()
         jeepObj.drawW1()
         jeepObj.drawW2()
+        glPopMatrix() # <--- CRITICAL: Pop matrix from jeepObj.draw()
         
         glDisable(GL_LIGHTING)
         glColor3f(0.0, 1.0, 1.0)
@@ -391,6 +428,7 @@ def display():
         text3d(f"Display Mode: {mode_name}", -2.0, 4.0, 0.0)
         
     else:
+        # === GAME MODE RENDER ===
         # Headlights
         if jeepObj.lightOn and lightMode != 0: 
             glEnable(GL_LIGHT1)
@@ -441,67 +479,94 @@ def display():
         if lightMode != 0: glEnable(GL_LIGHTING)
 
         if lightMode == 4:
-            # We add a dark grey "glow" (Emission) so it appears visible
-            # This bypasses the ambient light calculation entirely.
             glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.2, 0.2, 0.2, 1.0])
         else:
-            # Ensure emission is off for other modes
             glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.0, 0.0, 0.0, 1.0])
 
         tunnelObj.draw()
 
         glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.0, 0.0, 0.0, 1.0])
 
+        # Streetlights Optimization
         light_distances = []
         for sl in allstreetlights:
-            # Simple distance formula (Z-axis is the most important here)
             dist = abs(sl.posZ - jeepObj.posZ)
             light_distances.append((dist, sl))
 
-        # 2. Sort the list so the closest lights are first
         light_distances.sort(key=lambda x: x[0])
-
-        # 3. The available OpenGL Light IDs
         available_ids = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
 
-        # 4. Assign IDs to the closest ones, set None for far ones
+        # Reset lights
+        for i in available_ids: glDisable(i)
+
         for i, (dist, sl) in enumerate(light_distances):
             if i < len(available_ids):
-                # This light is close! Turn it on.
                 sl.lightID = available_ids[i]
-                
-                # Optional: Fade out lights that are getting far away but still "active"
-                # to prevent "popping" (Requires advanced attenuation tweaking, skipping for now)
             else:
-                # This light is too far/low priority. Turn it off.
                 sl.lightID = None
-                # Ensure the light source itself is disabled in OpenGL
-                # (We don't know which ID it *used* to have, so we rely on the 
-                # next frame's closest light to overwrite the GL_LIGHTx setting)
 
-            sl.draw()
-            
-            # IMPORTANT: If a light was just drawn with an ID (e.g. LIGHT2), 
-            # we need to ensure LIGHT2 is turned OFF if it isn't used in the next frame.
-            # However, since we re-enable IDs every frame for the closest ones, 
-            # we just need to be careful about 'ghost' lights.
-            # A safer way is to disable all streetlights first:
-        
-        # (Put this BEFORE the loop above if you see flickering artifacts)
-        for i in available_ids:
-            glDisable(i)
+            sl.draw() 
 
+        # Remaining objects
         for sl in allstreetlights: sl.draw()
         for cone in allcones: cone.draw()
         for star in allstars: star.draw()
 
+        # Draw Player Jeep
         jeepObj.draw()
         jeepObj.drawW1()
         jeepObj.drawW2()
         jeepObj.drawLight()
+        glPopMatrix() # <--- CRITICAL: Pop matrix from jeepObj.draw()
     
-    glPopMatrix()
     glutSwapBuffers()
+
+def updateIntro(dt):
+    global introTime, jeepObj, jeep2Obj, villainStar, currentMode
+    
+    introTime += dt
+    
+    # -- SCENE 1: Chilling (0s to 3s) --
+    if introTime < 3.0:
+        speed = 5.0 * dt
+        jeepObj.posZ += speed
+        jeep2Obj.posZ += speed
+        
+        jeep2Obj.posX = jeepObj.posX + 3.0
+        
+        jeepObj.wheelDir = 'fwd'
+        jeep2Obj.wheelDir = 'fwd'
+        jeepObj.rotateWheel(-0.1 * (dt*1000))
+        jeep2Obj.rotateWheel(-0.1 * (dt*1000))
+
+    # -- SCENE 2: The Ambush (3s to 6s) --
+    elif introTime < 6.0:
+        jeepObj.wheelDir = 'stop'
+        jeep2Obj.wheelDir = 'stop'
+        
+        targetY = 2.0
+        if villainStar.posY > targetY:
+            villainStar.posY -= 10.0 * dt
+        
+        villainStar.posZ = jeepObj.posZ + 15.0
+        villainStar.posX = jeepObj.posX + 1.5 
+
+    # -- SCENE 3: The Kidnapping (6s to 9s) --
+    elif introTime < 9.0:
+        circle_speed = 5.0
+        radius = 4.0
+        villainStar.posX = jeep2Obj.posX + math.cos(introTime * circle_speed) * radius
+        villainStar.posZ = jeep2Obj.posZ + math.sin(introTime * circle_speed) * radius
+
+    # -- SCENE 4: The Chase Begins (9s to 11s) --
+    elif introTime < 11.0:
+        fly_speed = 40.0 * dt
+        villainStar.posZ += fly_speed
+        jeep2Obj.posZ += fly_speed 
+        
+    # -- END: Transition to Game --
+    else:
+        startGameplay()
 
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
@@ -522,7 +587,11 @@ def idle():
 
     seconds_passed = tickTime / 1000.0
     
-    if currentMode == MODE_GAME:
+    # --- CHANGED: Logic ONLY here. Drawing moved to display() ---
+    if currentMode == MODE_INTRO:
+            updateIntro(seconds_passed)
+
+    elif currentMode == MODE_GAME:
 
         # Game Logic
         boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ)
@@ -537,11 +606,9 @@ def idle():
             moveAmount = moveSpeed * seconds_passed
             rotAmount = rotSpeed * seconds_passed
 
-            # === 1. SAVE CURRENT (SAFE) POSITION ===
             oldX = jeepObj.posX
             oldZ = jeepObj.posZ
 
-            # === 2. APPLY MOVEMENT ===
             isMoving = False
 
             if keyState['up']:
@@ -562,13 +629,9 @@ def idle():
                 jeepObj.move(True, -rotAmount)
                 isMoving = True 
 
-            # Now this check will actually work
-            if isMoving and isColliding(): #
-                # We hit something! Undo the movement.
+            if isMoving and isColliding(): 
                 jeepObj.posX = oldX
                 jeepObj.posZ = oldZ
-                
-                # Stop the wheels visually
                 jeepObj.wheelDir = 'stop'
         
         for s in allstars:
@@ -663,8 +726,6 @@ def setView():
                   jeepObj.posX, jeepObj.posY, jeepObj.posZ,
                   0.0, 1.0, 0.0)
 
-    glutPostRedisplay()
-
 def setObjView():
     pass
 
@@ -732,7 +793,8 @@ def specialKeysUp(keypress, mX, mY):
 
 def myKeyboard(key, mX, mY):
     global eyeX, eyeY, eyeZ, angle, radius, helpWindow, centered, helpWin, overReason, topView, behindView, phi, jeepObj
-    
+    global currentMode
+
     if key == b'h':
         winNum = glutGetWindow()
         if helpWindow == False:
@@ -789,6 +851,12 @@ def myKeyboard(key, mX, mY):
 
     elif key == b'l': 
         jeepObj.toggleLight()
+
+    elif key == b' ': 
+        if currentMode == MODE_INTRO:
+            startGameplay() # Skip intro
+        else:
+            jeepObj.wheelDir = 'stop' 
 
     setView()
 
@@ -861,6 +929,14 @@ def reshape(w, h):
     windowHeight = h
     glViewport(0, 0, w, h)
     setView()
+
+def startGameplay():
+    global currentMode, jeepObj
+    currentMode = MODE_GAME
+    # Reset player position for the actual race
+    jeepObj.posX = 0.0
+    jeepObj.posZ = 0.0
+    print("Game Started!")
 
 #--------------------------------------------making game more complex--------
 def addCone(x,z):
@@ -962,10 +1038,10 @@ def showHelp():
     drawTextBitmap("Left/Right Arrows: Turn Jeep Left / Right", -0.8, 0.5)
     drawTextBitmap("Spacebar: Stop wheel rotation (Brake)", -0.8, 0.4)
     drawTextBitmap("'+' / '-': Increase / Decrease Jeep Size", -0.8, 0.3)
-    drawTextBitmap("'l': Toggle Headlights", -0.8, 0.2) # <--- ADDED THIS LINE
+    drawTextBitmap("'l': Toggle Headlights", -0.8, 0.2) 
 
     glColor3f(0.0, 1.0, 0.0)
-    drawTextBitmap("Camera Controls:", -0.9, 0.0) # Moved down slightly to fit above
+    drawTextBitmap("Camera Controls:", -0.9, 0.0) 
     glColor3f(1.0, 1.0, 1.0)
     drawTextBitmap("Middle Mouse + Drag: Orbit Camera", -0.8, -0.1)
     drawTextBitmap("'z' / 'x': Zoom In / Zoom Out", -0.8, -0.2)
@@ -1014,15 +1090,11 @@ def setupStreetLights():
     available_lights = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
     light_idx = 0
     
-    # Create lights along the road (z-axis)
-    # Start from z=0 and go up to the end of the land
     for z_pos in range(0, int(land * gameEnlarge), 40): 
         
-        # Left Side Light
         sl_left = streetlight.StreetLight(-land + 2, z_pos, None)
         allstreetlights.append(sl_left)
 
-        # Right Side Light
         sl_right = streetlight.StreetLight(land - 2, z_pos, None)
         allstreetlights.append(sl_right)
     
@@ -1039,7 +1111,6 @@ def show_launcher():
     def start_game():
         global windowWidth, windowHeight, isFullScreen, currentMode, lightMode, behindView
         
-        # 1. Resolution / Fullscreen
         res_selection = resolution_var.get()
         if res_selection == "Start in Fullscreen":
             isFullScreen = True
@@ -1051,7 +1122,6 @@ def show_launcher():
             windowWidth = int(w)
             windowHeight = int(h)
 
-        # 2. Game Mode Selection
         mode_selection = mode_var.get()
         if mode_selection == "Display Mode (Lighting Test)":
             currentMode = MODE_DISPLAY
@@ -1059,10 +1129,14 @@ def show_launcher():
             behindView = False
             print("Starting in Display Mode")
         else:
-            currentMode = MODE_GAME
+            currentMode = MODE_INTRO 
             lightMode = 4
             behindView = True
-            print("Starting in Game Mode")
+            
+            jeep2Obj.posX = 3.0
+            jeep2Obj.posZ = 0.0
+
+            print("Starting Intro Sequence...")
         
         root.destroy()
 
@@ -1072,7 +1146,6 @@ def show_launcher():
     frame = ttk.Frame(root, padding="20")
     frame.grid(row=0, column=0)
     
-    # --- Section 1: Mode Selection ---
     ttk.Label(frame, text="Select Game Mode:", font=('Helvetica', 10, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=(0,5))
     mode_var = tk.StringVar(value="Game Mode (Racing)")
     
@@ -1082,7 +1155,6 @@ def show_launcher():
 
     ttk.Separator(frame, orient='horizontal').grid(row=3, column=0, sticky="ew", pady=10)
 
-    # --- Section 2: Resolution Selection ---
     ttk.Label(frame, text="Select Resolution:", font=('Helvetica', 10, 'bold')).grid(row=4, column=0, sticky=tk.W, pady=(0,5))
     resolution_var = tk.StringVar(value="800x800") 
     
@@ -1090,7 +1162,6 @@ def show_launcher():
     for i, option in enumerate(display_options):
         ttk.Radiobutton(frame, text=option, variable=resolution_var, value=option).grid(row=5+i, column=0, sticky=tk.W, padx=20)
 
-    # Start Button
     ttk.Button(frame, text="Start Application", command=start_game).grid(row=10, column=0, pady=20)
 
     root.eval('tk::PlaceWindow . center')
@@ -1131,7 +1202,6 @@ def main():
     glutKeyboardFunc(myKeyboard)
     glutReshapeFunc(reshape)
 
-    # Sub-menus
     lightMenu = glutCreateMenu(menuFunc)
     glutAddMenuEntry("Ambient Light", 0)
     glutAddMenuEntry("Point Light", 1)
@@ -1159,7 +1229,6 @@ def main():
 
     setupStreetLights()
 
-    # Populate objects (Game Mode specific mostly)
     for i in range(coneAmount):
         addCone(random.randint(-land, land), random.randint(10.0, land*gameEnlarge))
 
@@ -1169,6 +1238,8 @@ def main():
 
     for cone in allcones:
         cone.makeDisplayLists()
+
+    villainStar.makeDisplayLists()
 
     for star in allstars:
         star.makeDisplayLists()
