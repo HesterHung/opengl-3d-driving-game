@@ -51,6 +51,18 @@ jeep1Obj = jeep.jeep('p')
 jeep2Obj = jeep.jeep('g')
 jeep3Obj = jeep.jeep('r')
 
+new_size = 0.85
+
+# Apply to Player Jeep
+jeep1Obj.sizeX = new_size
+jeep1Obj.sizeY = new_size
+jeep1Obj.sizeZ = new_size
+
+# Apply to Friend Jeep
+jeep2Obj.sizeX = new_size
+jeep2Obj.sizeY = new_size
+jeep2Obj.sizeZ = new_size
+
 allJeeps = [jeep1Obj, jeep2Obj, jeep3Obj]
 jeepNum = 0
 jeepObj = allJeeps[jeepNum]
@@ -526,13 +538,19 @@ def updateIntro(dt):
     
     introTime += dt
     
+    myLane = -2.5 
+    friendLane = 2.5 
+    
     # -- SCENE 1: Chilling (0s to 3s) --
     if introTime < 3.0:
         speed = 5.0 * dt
         jeepObj.posZ += speed
         jeep2Obj.posZ += speed
         
-        jeep2Obj.posX = jeepObj.posX + 3.0
+        # --- UPDATED POSITIONS ---
+        jeepObj.posX = myLane      # Me on the Right
+        jeep2Obj.posX = friendLane # Friend on the Left
+        # -------------------------
         
         jeepObj.wheelDir = 'fwd'
         jeep2Obj.wheelDir = 'fwd'
@@ -549,14 +567,17 @@ def updateIntro(dt):
             villainStar.posY -= 10.0 * dt
         
         villainStar.posZ = jeepObj.posZ + 15.0
-        villainStar.posX = jeepObj.posX + 1.5 
+        # Drop exactly between them
+        villainStar.posX = (myLane + friendLane) / 2.0 
 
     # -- SCENE 3: The Kidnapping (6s to 9s) --
     elif introTime < 9.0:
         circle_speed = 5.0
-        radius = 4.0
-        villainStar.posX = jeep2Obj.posX + math.cos(introTime * circle_speed) * radius
-        villainStar.posZ = jeep2Obj.posZ + math.sin(introTime * circle_speed) * radius
+        orbit_radius = 5.0 # Increased radius for bigger jeeps
+        
+        # Circle around the FRIEND (who is on the left)
+        villainStar.posX = jeep2Obj.posX + math.cos(introTime * circle_speed) * orbit_radius
+        villainStar.posZ = jeep2Obj.posZ + math.sin(introTime * circle_speed) * orbit_radius
 
     # -- SCENE 4: The Chase Begins (9s to 11s) --
     elif introTime < 11.0:
@@ -567,6 +588,7 @@ def updateIntro(dt):
     # -- END: Transition to Game --
     else:
         startGameplay()
+
 
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
