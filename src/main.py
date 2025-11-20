@@ -21,7 +21,7 @@ villainStar = star.star(0, 50) # Spawn it further down the road
 villainStar.sizeX = 3.0 # Make it a BIG boss star
 villainStar.sizeY = 3.0
 villainStar.sizeZ = 3.0
-villainStar.posY = 10.0 # Start high in the air
+villainStar.posY = 20.0 # Start high in the air
 
 minionStars = []
 for _ in range(10):
@@ -412,9 +412,10 @@ def display():
         jeep2Obj.drawW2()
         glPopMatrix() # Pop matrix from jeep2Obj.draw()
         
-        villainStar.draw() 
+        if introTime > 5.0:
+            villainStar.draw()
 
-        if introTime > 6.0:
+        if introTime > 10.0: 
             for s in minionStars:
                 s.draw()
 
@@ -436,9 +437,9 @@ def display():
         glLineWidth(3.0)         # Make the text bold/thick
 
         msg = ""
-        if introTime < 3.0: msg = "Just chilling with my friend..."
-        elif introTime < 6.0: msg = "OH NO! A Giant Star appeared!"
-        elif introTime < 9.0: msg = "Leave my friend alone!"
+        if introTime < 5.0: msg = "Just chilling with my friend..."  
+        elif introTime < 10.0: msg = "OH NO! A Giant Star appeared!" 
+        elif introTime < 15.0: msg = "There are too many of them!"
         else: msg = "THEY TOOK HIM! I MUST SAVE HIM!"
 
         # --- NEW STROKE FONT LOGIC ---
@@ -602,8 +603,8 @@ def updateIntro(dt):
     myLane = -5   
     friendLane = 5
     
-    # -- SCENE 1: Chilling (0s to 3s) --
-    if introTime < 3.0:
+    # -- SCENE 1: Chilling (0s to 5s) --
+    if introTime < 5.0: # Changed from 3.0
         speed = 5.0 * dt
         jeepObj.posZ += speed
         jeep2Obj.posZ += speed
@@ -616,21 +617,21 @@ def updateIntro(dt):
         jeepObj.rotateWheel(-0.1 * (dt*1000))
         jeep2Obj.rotateWheel(-0.1 * (dt*1000))
 
-    # -- SCENE 2: The Boss Appears (3s to 6s) --
-    elif introTime < 6.0:
+    # -- SCENE 2: The Boss Appears (5s to 10s) --
+    elif introTime < 10.0: # Changed from 6.0
         jeepObj.wheelDir = 'stop'
         jeep2Obj.wheelDir = 'stop'
         
         # Giant Star Drops
-        targetY = 2.0
+        targetY = 3.0
         if villainStar.posY > targetY:
-            villainStar.posY -= 10.0 * dt
+            villainStar.posY -= 30.0 * dt
         
         villainStar.posZ = jeepObj.posZ + 15.0
         villainStar.posX = (myLane + friendLane) / 2.0 
 
-    # -- SCENE 3: Minions Swarm (6s to 9s) --
-    elif introTime < 9.0:
+    # -- SCENE 3: Minions Swarm (10s to 15s) --
+    elif introTime < 15.0: # Changed from 9.0
         # 1. Calculate Center of "US"
         centerX = (jeepObj.posX + jeep2Obj.posX) / 2.0
         centerZ = jeepObj.posZ
@@ -640,30 +641,21 @@ def updateIntro(dt):
         
         # 2. Update every Minion position
         for i, s in enumerate(minionStars):
-            # Distribute 10 stars evenly (360 degrees / 10)
             angle_offset = (math.pi * 2 / 10) * i
-            
-            # Animate the angle over time
             current_angle = (introTime * orbit_speed) + angle_offset
             
             s.posX = centerX + math.cos(current_angle) * circle_radius
             s.posZ = centerZ + math.sin(current_angle) * circle_radius
-            
-            # Add a cool "bobbing" effect so they aren't a flat ring
             s.posY = 4.0 + math.sin(introTime * 5.0 + i) 
-            
-            # Rotate the star mesh itself
             s.rotation += 200 * dt
 
-    # -- SCENE 4: Kidnapping (9s+) --
-    elif introTime < 11.0:
+    # -- SCENE 4: Kidnapping (15s to 19s) --
+    elif introTime < 19.0: # Changed from 11.0
         fly_speed = 40.0 * dt
         
-        # Boss and Friend fly away
         villainStar.posZ += fly_speed
         jeep2Obj.posZ += fly_speed 
         
-        # Minions chase them!
         for s in minionStars:
             s.posZ += fly_speed
 
@@ -800,37 +792,29 @@ def setView():
     # --- CINEMATIC CAMERA (INTRO MODE) ---
     if currentMode == MODE_INTRO:
         
-        # 1. CHILLING (0s - 3s)
-        # Standard follow view to establish the scene
-        if introTime < 3.0:
+        # 1. CHILLING (0s - 5s)
+        if introTime < 5.0: # Changed from 3.0
              gluLookAt(jeepObj.posX, jeepObj.posY + 4.0, jeepObj.posZ - 8.0,
                        jeepObj.posX, jeepObj.posY, jeepObj.posZ + 10.0, 
                        0.0, 1.0, 0.0)
 
-        # 2. GIANT STAR FALLS (3s - 6s)
-        # "Behind the giant star... showing it falling in front of us"
-        # Camera is placed far ahead (Z+25), looking BACK at the Jeeps (Z+0).
-        # The Star (Z+15) will drop between the Camera and the Jeeps.
-        elif introTime < 6.0:
+        # 2. GIANT STAR FALLS (5s - 10s)
+        elif introTime < 10.0: # Changed from 6.0
              starZ = jeepObj.posZ + 15.0
-             gluLookAt(0.0, 6.0, starZ + 10.0,       # Camera behind the star
-                       jeepObj.posX, jeepObj.posY, jeepObj.posZ, # Looking at Player
+             gluLookAt(0.0, 6.0, starZ + 10.0,
+                       jeepObj.posX, jeepObj.posY, jeepObj.posZ,
                        0.0, 1.0, 0.0)
 
-        # 3. MINIONS SWARM (6s - 9s)
-        # "Higher position so that we saw all star"
-        # Top-Down view looking at the circle formation
-        elif introTime < 9.0:
-             gluLookAt(0.0, 35.0, jeepObj.posZ + 5.0,  # High in the sky
-                       0.0, 0.0, jeepObj.posZ + 5.0,   # Looking straight down
-                       0.0, 0.0, -1.0)                 # Up vector aligned with road
+        # 3. MINIONS SWARM (10s - 15s)
+        elif introTime < 15.0: # Changed from 9.0
+             gluLookAt(0.0, 35.0, jeepObj.posZ + 5.0,
+                       0.0, 0.0, jeepObj.posZ + 5.0,
+                       0.0, 0.0, -1.0)
 
-        # 4. KIDNAPPING (9s+)
-        # "Watching from bottom to the sky... see them walk via our camera"
-        # Low angle on the road, looking up and forward as they fly over/away
+        # 4. KIDNAPPING (15s+)
         else:
-             gluLookAt(0.0, 0.5, jeepObj.posZ - 2.0,   # Very low (Ant's view)
-                       0.0, 25.0, jeepObj.posZ + 60.0, # Looking up at the tunnel/sky
+             gluLookAt(0.0, 0.5, jeepObj.posZ - 2.0,
+                       0.0, 25.0, jeepObj.posZ + 60.0,
                        0.0, 1.0, 0.0)
 
     # --- GAMEPLAY CAMERA (NORMAL MODES) ---
@@ -952,8 +936,6 @@ def myKeyboard(key, mX, mY):
             glutHideWindow()
             glutMainLoop()
 
-    elif key == b' ': 
-        jeepObj.wheelDir = 'stop' 
     elif key == b'+' or key == b'=':
         jeepObj.sizeX += 0.1
         jeepObj.sizeY += 0.1
