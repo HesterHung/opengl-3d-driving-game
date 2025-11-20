@@ -13,6 +13,7 @@ from tkinter import ttk
 MODE_GAME = 0
 MODE_DISPLAY = 1
 MODE_INTRO = 2
+MODE_VICTORY = 3
 currentMode = MODE_GAME # Default
 
 # --- Intro Story Variables ---
@@ -22,6 +23,9 @@ villainStar.sizeX = 3.0 # Make it a BIG boss star
 villainStar.sizeY = 3.0
 villainStar.sizeZ = 3.0
 villainStar.posY = 20.0 # Start high in the air
+
+victoryTimer = 0.0
+finalTimeStr = ""
 
 minionStars = []
 for _ in range(10):
@@ -46,6 +50,7 @@ centered = False
 
 gameStartTime = 0.0
 GAME_DURATION = 120.0
+timeLeft = GAME_DURATION
 beginTime = 0
 countTime = 0
 score = 0
@@ -327,7 +332,7 @@ def isColliding():
     return False
 
 def display():
-    global jeepObj, canStart, score, beginTime, countTime, lightMode
+    global jeepObj, canStart, score, beginTime, countTime, lightMode, timeLeft, GAME_DURATION
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
     setView()
@@ -526,6 +531,69 @@ def display():
         elif lightMode == 4: mode_name = "Default (Moonlight)"
         text3d(f"Display Mode: {mode_name}", -2.0, 4.0, 0.0)
         
+    elif currentMode == MODE_VICTORY:
+        # 1. Draw Environment
+        skyObj.draw()
+        if lightMode != 0: glEnable(GL_LIGHTING)
+        
+        for obj in objectArray: obj.draw() # Floor/Axis
+        tunnelObj.draw()
+        ribbonObj.draw()
+        
+        # Draw Streetlights
+        for sl in allstreetlights: sl.draw()
+
+        # 2. Draw the Happy Jeeps
+        jeepObj.draw()
+        jeepObj.drawW1()
+        jeepObj.drawW2()
+        glPopMatrix() 
+        
+        jeep2Obj.draw()
+        jeep2Obj.drawW1()
+        jeep2Obj.drawW2()
+        glPopMatrix() 
+
+        # 3. Draw Victory HUD
+        glDisable(GL_LIGHTING)
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(0, windowWidth, 0, windowHeight)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glDisable(GL_DEPTH_TEST)
+
+        # -- Main Text --
+        glColor3f(0.0, 1.0, 0.0) # Green
+        msg = "You Saved Your Friend!"
+        glLineWidth(3.0)
+        
+        glPushMatrix()
+        glTranslatef(50, 150, 0) 
+        glScalef(0.25, 0.25, 1.0)
+        for char in msg: glutStrokeCharacter(GLUT_STROKE_ROMAN, ord(char))
+        glPopMatrix()
+
+        # -- Time Text --
+        glColor3f(1.0, 1.0, 1.0) # White
+        time_msg = finalTimeStr
+        
+        glPushMatrix()
+        glTranslatef(50, 100, 0)
+        glScalef(0.15, 0.15, 1.0)
+        for char in time_msg: glutStrokeCharacter(GLUT_STROKE_ROMAN, ord(char))
+        glPopMatrix()
+
+        glLineWidth(1.0)
+        glEnable(GL_DEPTH_TEST)
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        if lightMode != 0: glEnable(GL_LIGHTING)
+
     else:
         # === GAME MODE RENDER ===
         # Headlights
@@ -772,7 +840,7 @@ def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
     global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime, timeLeft
     global stars_collected, STARS_TO_WIN, star_effect_timer
-    global boss_battle_active, villainStar, currentMode
+    global boss_battle_active, villainStar, currentMode, victoryTimer
 
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
@@ -789,14 +857,28 @@ def idle():
             jeepObj.wheelDir = 'stop'
             
         score = timeLeft 
-    else:
-        timeLeft = GAME_DURATION 
 
     if tickTime == 0: 
         glutPostRedisplay()
         return
 
     seconds_passed = tickTime / 1000.0
+
+    if currentMode == MODE_VICTORY:
+        victoryTimer += seconds_passed
+        
+        base_height = 2.0
+        jump_height = abs(math.sin(victoryTimer * 8.0)) * 1.5
+        
+        jeepObj.posY = base_height + jump_height
+        jeep2Obj.posY = base_height + jump_height
+        
+        # Spin wheels while in air
+        jeepObj.rotateWheel(-5.0 * seconds_passed)
+        jeep2Obj.rotateWheel(-5.0 * seconds_passed)
+        
+        glutPostRedisplay()
+        return
     
     if currentMode == MODE_INTRO:
             updateIntro(seconds_passed)
@@ -875,7 +957,7 @@ def idle():
                         star_effect_timer = 0.4
 
                         # 2. CHECK TRIGGER FOR BOSS (10/10)
-                        if stars_collected >= 10:
+                        if stars_collected >= 10: #TESTING USE, should be 10
                             boss_battle_active = True
                             
                             # Clear small stars
@@ -948,14 +1030,12 @@ def idle():
 
 #---------------------------------setting camera----------------------------
 def setView():
-    global eyeX, eyeY, eyeZ, windowWidth, windowHeight, currentMode, introTime, jeepObj
+    global eyeX, eyeY, eyeZ, windowWidth, windowHeight, currentMode, introTime, jeepObj, victoryTimer
     
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
 
-    if windowHeight == 0:
-        windowHeight = 1
-    
+    if windowHeight == 0: windowHeight = 1
     aspect = float(windowWidth) / float(windowHeight)
     gluPerspective(90, aspect, 0.1, 1000.0)
 
@@ -964,64 +1044,48 @@ def setView():
 
     # --- CINEMATIC CAMERA (INTRO MODE) ---
     if currentMode == MODE_INTRO:
-        
-        # 1. CHILLING (0s - 5s)
-        if introTime < 5.0: # Changed from 3.0
+        if introTime < 5.0:
              gluLookAt(jeepObj.posX, jeepObj.posY + 4.0, jeepObj.posZ - 8.0,
-                       jeepObj.posX, jeepObj.posY, jeepObj.posZ + 10.0, 
-                       0.0, 1.0, 0.0)
-
-        # 2. GIANT STAR FALLS (5s - 10s)
-        elif introTime < 10.0: # Changed from 6.0
+                       jeepObj.posX, jeepObj.posY, jeepObj.posZ + 10.0, 0.0, 1.0, 0.0)
+        elif introTime < 10.0:
              starZ = jeepObj.posZ + 15.0
-             gluLookAt(0.0, 6.0, starZ + 10.0,
-                       jeepObj.posX, jeepObj.posY, jeepObj.posZ,
-                       0.0, 1.0, 0.0)
-
-        # 3. MINIONS SWARM (10s - 15s)
-        elif introTime < 15.0: # Changed from 9.0
-             gluLookAt(0.0, 35.0, jeepObj.posZ + 5.0,
-                       0.0, 0.0, jeepObj.posZ + 5.0,
-                       0.0, 0.0, -1.0)
-
-        # 4. KIDNAPPING (15s+)
+             gluLookAt(0.0, 6.0, starZ + 10.0, jeepObj.posX, jeepObj.posY, jeepObj.posZ, 0.0, 1.0, 0.0)
+        elif introTime < 15.0:
+             gluLookAt(0.0, 35.0, jeepObj.posZ + 5.0, 0.0, 0.0, jeepObj.posZ + 5.0, 0.0, 0.0, -1.0)
         else:
-             gluLookAt(0.0, 0.5, jeepObj.posZ - 2.0,
-                       0.0, 25.0, jeepObj.posZ + 60.0,
-                       0.0, 1.0, 0.0)
+             gluLookAt(0.0, 0.5, jeepObj.posZ - 2.0, 0.0, 25.0, jeepObj.posZ + 60.0, 0.0, 1.0, 0.0)
 
-    # --- GAMEPLAY CAMERA (NORMAL MODES) ---
+    # --- VICTORY CAMERA (ORBIT) ---
+    elif currentMode == MODE_VICTORY:
+        # Increased Radius to 22.0 to fix "Too Close" issue
+        orbit_radius = 22.0 
+        orbit_speed = 0.5
+        
+        # Center point is between the two jeeps (Jeep1 at 0, Jeep2 at 3)
+        center_x = 1.5 
+        center_z = 0.0
+        
+        # Calculate Rotating Eye Position
+        camX = center_x + math.cos(victoryTimer * orbit_speed) * orbit_radius
+        camZ = center_z + math.sin(victoryTimer * orbit_speed) * orbit_radius
+        camY = 6.0 # Look from slightly higher up
+        
+        gluLookAt(camX, camY, camZ,
+                  center_x, 2.0, center_z,
+                  0.0, 1.0, 0.0)
+
+    # --- GAMEPLAY CAMERA ---
     else:
         if topView:
-            eye_x = jeepObj.posX
-            eye_y = max(1.0, radius)
-            eye_z = jeepObj.posZ
-            center_x = jeepObj.posX
-            center_y = jeepObj.posY
-            center_z = jeepObj.posZ
-            gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 0.0, 1.0)
-
+            gluLookAt(jeepObj.posX, max(1.0, radius), jeepObj.posZ, jeepObj.posX, jeepObj.posY, jeepObj.posZ, 0.0, 0.0, 1.0)
         elif behindView:
-            behind_fraction = 0.8
-            above_fraction  = 0.4
-            behind_dist = max(1.0, radius * behind_fraction)
-            above_dist  = max(0.5, radius * above_fraction)
-
             rad_angle = math.radians(jeepObj.rotation)
-            eye_x = jeepObj.posX - behind_dist * math.sin(rad_angle)
-            eye_y = jeepObj.posY + above_dist
-            eye_z = jeepObj.posZ - behind_dist * math.cos(rad_angle)
-
-            center_x = jeepObj.posX
-            center_y = jeepObj.posY
-            center_z = jeepObj.posZ
-
-            gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 1.0, 0.0)
-
+            eye_x = jeepObj.posX - max(1.0, radius * 0.8) * math.sin(rad_angle)
+            eye_y = jeepObj.posY + max(0.5, radius * 0.4)
+            eye_z = jeepObj.posZ - max(1.0, radius * 0.8) * math.cos(rad_angle)
+            gluLookAt(eye_x, eye_y, eye_z, jeepObj.posX, jeepObj.posY, jeepObj.posZ, 0.0, 1.0, 0.0)
         else:
-            gluLookAt(eyeX, eyeY, eyeZ,
-                      jeepObj.posX, jeepObj.posY, jeepObj.posZ,
-                      0.0, 1.0, 0.0)
+            gluLookAt(eyeX, eyeY, eyeZ, jeepObj.posX, jeepObj.posY, jeepObj.posZ, 0.0, 1.0, 0.0)
 
 def setObjView():
     pass
@@ -1295,16 +1359,39 @@ def gameOver():
     glutMainLoop()
     
 def gameSuccess():
-    global finalScore
-    print ("Game success!")
-    finalScore = score-6
-    glutHideWindow()
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
-    glutInitWindowSize(200,200)
-    glutInitWindowPosition(600,100)
-    overWin = glutCreateWindow("Complete!")
-    glutDisplayFunc(winScreen)
-    glutMainLoop()
+    global currentMode, victoryTimer, jeepObj, jeep2Obj, villainStar, boss_battle_active
+    global finalTimeStr, timeLeft, GAME_DURATION
+    
+    print("Game success! Starting Victory Sequence...")
+    
+    # 1. Calculate Final Time String (Capture it NOW before it resets)
+    time_used = GAME_DURATION - timeLeft
+    mins = int(time_used // 60)
+    secs = int(time_used % 60)
+    finalTimeStr = "Time used: {:02d}:{:02d}".format(mins, secs)
+    
+    # 2. Switch Mode
+    currentMode = MODE_VICTORY
+    victoryTimer = 0.0
+    boss_battle_active = False
+    
+    # 3. Hide the Boss
+    villainStar.posY = -100.0
+    
+    # 4. Teleport Everyone back to Origin (Safety Zone for Rendering)
+    jeepObj.posX = -3.5
+    jeepObj.posZ = 0.0
+    jeepObj.posY = 2.0
+    
+    jeep2Obj.posX = 3.5
+    jeep2Obj.posZ = 0.0
+    jeep2Obj.posY = 2.0
+    
+    # 5. Stop wheels and orient forward
+    jeepObj.wheelDir = 'stop'
+    jeep2Obj.wheelDir = 'stop'
+    jeepObj.rotation = 0
+    jeep2Obj.rotation = 0
 
 def winScreen():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
