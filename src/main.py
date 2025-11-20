@@ -418,22 +418,70 @@ def display():
             for s in minionStars:
                 s.draw()
 
-        # Draw Subtitles
+        # --- HUD: 2D Overlay for Story & Skip Text ---
         glDisable(GL_LIGHTING)
-        glColor3f(1.0, 1.0, 0.0) 
-        
+
+        # 1. Switch to 2D View
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(0, windowWidth, 0, windowHeight)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glDisable(GL_DEPTH_TEST) # Draw on top of everything
+
+        # --- STORY TEXT (Top, Yellow, HUGE) ---
+        glColor3f(1.0, 1.0, 0.0) # Yellow
+        glLineWidth(3.0)         # Make the text bold/thick
+
         msg = ""
         if introTime < 3.0: msg = "Just chilling with my friend..."
         elif introTime < 6.0: msg = "OH NO! A Giant Star appeared!"
         elif introTime < 9.0: msg = "Leave my friend alone!"
         else: msg = "THEY TOOK HIM! I MUST SAVE HIM!"
-            
-        text3d(msg, jeepObj.posX, jeepObj.posY + 5.0, jeepObj.posZ)
+
+        # --- NEW STROKE FONT LOGIC ---
+        # 1. Define Scale (0.2 is approx size 24. Try 0.3 or 0.4 for HUGE)
+        text_scale = 0.35 
         
-        glColor3f(1.0, 1.0, 1.0)
-        text3d("[Press SPACE to Skip]", jeepObj.posX, jeepObj.posY + 6.0, jeepObj.posZ)
+        # 2. Calculate Exact Width to Center it
+        text_width_units = 0
+        for char in msg:
+            text_width_units += glutStrokeWidth(GLUT_STROKE_ROMAN, ord(char))
         
-        glEnable(GL_LIGHTING)
+        real_width = text_width_units * text_scale
+        start_x = (windowWidth - real_width) / 2
+        start_y = windowHeight - 100
+
+        # 3. Draw Stroke Text
+        glPushMatrix()
+        glTranslatef(start_x, start_y, 0)        # Move to position
+        glScalef(text_scale, text_scale, 1.0)    # Scale it up
+        for char in msg:
+            glutStrokeCharacter(GLUT_STROKE_ROMAN, ord(char))
+        glPopMatrix()
+        
+        glLineWidth(1.0) # Reset line width for other objects
+
+        # --- SKIP TEXT (Bottom, White, Normal) ---
+        glColor3f(1.0, 1.0, 1.0) # White
+        skip_msg = "[Press SPACE to Skip]"
+        
+        # Calculate center position (Approximate width for Helvetica 18)
+        skip_width = len(skip_msg) * 9
+        glRasterPos2f((windowWidth - skip_width) / 2, 30) 
+        for char in skip_msg:
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+
+        # 3. Restore 3D View
+        glEnable(GL_DEPTH_TEST)
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        
+        if lightMode != 0: glEnable(GL_LIGHTING)
 
     elif currentMode == MODE_DISPLAY:
         # === DISPLAY MODE RENDER ===
@@ -735,7 +783,7 @@ def idle():
 
 #---------------------------------setting camera----------------------------
 def setView():
-    global eyeX, eyeY, eyeZ, windowWidth, windowHeight
+    global eyeX, eyeY, eyeZ, windowWidth, windowHeight, currentMode, introTime, jeepObj
     
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
@@ -749,36 +797,74 @@ def setView():
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
 
-    if topView:
-        eye_x = jeepObj.posX
-        eye_y = max(1.0, radius)
-        eye_z = jeepObj.posZ
-        center_x = jeepObj.posX
-        center_y = jeepObj.posY
-        center_z = jeepObj.posZ
-        gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 0.0, 1.0)
+    # --- CINEMATIC CAMERA (INTRO MODE) ---
+    if currentMode == MODE_INTRO:
+        
+        # 1. CHILLING (0s - 3s)
+        # Standard follow view to establish the scene
+        if introTime < 3.0:
+             gluLookAt(jeepObj.posX, jeepObj.posY + 4.0, jeepObj.posZ - 8.0,
+                       jeepObj.posX, jeepObj.posY, jeepObj.posZ + 10.0, 
+                       0.0, 1.0, 0.0)
 
-    elif behindView:
-        behind_fraction = 0.8
-        above_fraction  = 0.4
-        behind_dist = max(1.0, radius * behind_fraction)
-        above_dist  = max(0.5, radius * above_fraction)
+        # 2. GIANT STAR FALLS (3s - 6s)
+        # "Behind the giant star... showing it falling in front of us"
+        # Camera is placed far ahead (Z+25), looking BACK at the Jeeps (Z+0).
+        # The Star (Z+15) will drop between the Camera and the Jeeps.
+        elif introTime < 6.0:
+             starZ = jeepObj.posZ + 15.0
+             gluLookAt(0.0, 6.0, starZ + 10.0,       # Camera behind the star
+                       jeepObj.posX, jeepObj.posY, jeepObj.posZ, # Looking at Player
+                       0.0, 1.0, 0.0)
 
-        rad_angle = math.radians(jeepObj.rotation)
-        eye_x = jeepObj.posX - behind_dist * math.sin(rad_angle)
-        eye_y = jeepObj.posY + above_dist
-        eye_z = jeepObj.posZ - behind_dist * math.cos(rad_angle)
+        # 3. MINIONS SWARM (6s - 9s)
+        # "Higher position so that we saw all star"
+        # Top-Down view looking at the circle formation
+        elif introTime < 9.0:
+             gluLookAt(0.0, 35.0, jeepObj.posZ + 5.0,  # High in the sky
+                       0.0, 0.0, jeepObj.posZ + 5.0,   # Looking straight down
+                       0.0, 0.0, -1.0)                 # Up vector aligned with road
 
-        center_x = jeepObj.posX
-        center_y = jeepObj.posY
-        center_z = jeepObj.posZ
+        # 4. KIDNAPPING (9s+)
+        # "Watching from bottom to the sky... see them walk via our camera"
+        # Low angle on the road, looking up and forward as they fly over/away
+        else:
+             gluLookAt(0.0, 0.5, jeepObj.posZ - 2.0,   # Very low (Ant's view)
+                       0.0, 25.0, jeepObj.posZ + 60.0, # Looking up at the tunnel/sky
+                       0.0, 1.0, 0.0)
 
-        gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 1.0, 0.0)
-
+    # --- GAMEPLAY CAMERA (NORMAL MODES) ---
     else:
-        gluLookAt(eyeX, eyeY, eyeZ,
-                  jeepObj.posX, jeepObj.posY, jeepObj.posZ,
-                  0.0, 1.0, 0.0)
+        if topView:
+            eye_x = jeepObj.posX
+            eye_y = max(1.0, radius)
+            eye_z = jeepObj.posZ
+            center_x = jeepObj.posX
+            center_y = jeepObj.posY
+            center_z = jeepObj.posZ
+            gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 0.0, 1.0)
+
+        elif behindView:
+            behind_fraction = 0.8
+            above_fraction  = 0.4
+            behind_dist = max(1.0, radius * behind_fraction)
+            above_dist  = max(0.5, radius * above_fraction)
+
+            rad_angle = math.radians(jeepObj.rotation)
+            eye_x = jeepObj.posX - behind_dist * math.sin(rad_angle)
+            eye_y = jeepObj.posY + above_dist
+            eye_z = jeepObj.posZ - behind_dist * math.cos(rad_angle)
+
+            center_x = jeepObj.posX
+            center_y = jeepObj.posY
+            center_z = jeepObj.posZ
+
+            gluLookAt(eye_x, eye_y, eye_z, center_x, center_y, center_z, 0.0, 1.0, 0.0)
+
+        else:
+            gluLookAt(eyeX, eyeY, eyeZ,
+                      jeepObj.posX, jeepObj.posY, jeepObj.posZ,
+                      0.0, 1.0, 0.0)
 
 def setObjView():
     pass
