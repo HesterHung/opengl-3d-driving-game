@@ -23,6 +23,15 @@ villainStar.sizeY = 3.0
 villainStar.sizeZ = 3.0
 villainStar.posY = 10.0 # Start high in the air
 
+minionStars = []
+for _ in range(10):
+    s = star.star(0, 0)
+    s.sizeX = 0.8 # Smaller than normal stars
+    s.sizeY = 0.8
+    s.sizeZ = 0.8
+    s.posY = 15.0 # Start high up (hidden)
+    minionStars.append(s)
+
 # windowSize = 600
 windowWidth = 600
 windowHeight = 600
@@ -405,6 +414,10 @@ def display():
         
         villainStar.draw() 
 
+        if introTime > 6.0:
+            for s in minionStars:
+                s.draw()
+
         # Draw Subtitles
         glDisable(GL_LIGHTING)
         glColor3f(1.0, 1.0, 0.0) 
@@ -534,12 +547,12 @@ def display():
     glutSwapBuffers()
 
 def updateIntro(dt):
-    global introTime, jeepObj, jeep2Obj, villainStar, currentMode
+    global introTime, jeepObj, jeep2Obj, villainStar, currentMode, minionStars
     
     introTime += dt
     
-    myLane = -2.5 
-    friendLane = 2.5 
+    myLane = -5   
+    friendLane = 5
     
     # -- SCENE 1: Chilling (0s to 3s) --
     if introTime < 3.0:
@@ -547,48 +560,67 @@ def updateIntro(dt):
         jeepObj.posZ += speed
         jeep2Obj.posZ += speed
         
-        # --- UPDATED POSITIONS ---
-        jeepObj.posX = myLane      # Me on the Right
-        jeep2Obj.posX = friendLane # Friend on the Left
-        # -------------------------
+        jeepObj.posX = myLane      
+        jeep2Obj.posX = friendLane 
         
         jeepObj.wheelDir = 'fwd'
         jeep2Obj.wheelDir = 'fwd'
         jeepObj.rotateWheel(-0.1 * (dt*1000))
         jeep2Obj.rotateWheel(-0.1 * (dt*1000))
 
-    # -- SCENE 2: The Ambush (3s to 6s) --
+    # -- SCENE 2: The Boss Appears (3s to 6s) --
     elif introTime < 6.0:
         jeepObj.wheelDir = 'stop'
         jeep2Obj.wheelDir = 'stop'
         
+        # Giant Star Drops
         targetY = 2.0
         if villainStar.posY > targetY:
             villainStar.posY -= 10.0 * dt
         
         villainStar.posZ = jeepObj.posZ + 15.0
-        # Drop exactly between them
         villainStar.posX = (myLane + friendLane) / 2.0 
 
-    # -- SCENE 3: The Kidnapping (6s to 9s) --
+    # -- SCENE 3: Minions Swarm (6s to 9s) --
     elif introTime < 9.0:
-        circle_speed = 5.0
-        orbit_radius = 5.0 # Increased radius for bigger jeeps
+        # 1. Calculate Center of "US"
+        centerX = (jeepObj.posX + jeep2Obj.posX) / 2.0
+        centerZ = jeepObj.posZ
         
-        # Circle around the FRIEND (who is on the left)
-        villainStar.posX = jeep2Obj.posX + math.cos(introTime * circle_speed) * orbit_radius
-        villainStar.posZ = jeep2Obj.posZ + math.sin(introTime * circle_speed) * orbit_radius
+        circle_radius = 12.0 
+        orbit_speed = 2.5
+        
+        # 2. Update every Minion position
+        for i, s in enumerate(minionStars):
+            # Distribute 10 stars evenly (360 degrees / 10)
+            angle_offset = (math.pi * 2 / 10) * i
+            
+            # Animate the angle over time
+            current_angle = (introTime * orbit_speed) + angle_offset
+            
+            s.posX = centerX + math.cos(current_angle) * circle_radius
+            s.posZ = centerZ + math.sin(current_angle) * circle_radius
+            
+            # Add a cool "bobbing" effect so they aren't a flat ring
+            s.posY = 4.0 + math.sin(introTime * 5.0 + i) 
+            
+            # Rotate the star mesh itself
+            s.rotation += 200 * dt
 
-    # -- SCENE 4: The Chase Begins (9s to 11s) --
+    # -- SCENE 4: Kidnapping (9s+) --
     elif introTime < 11.0:
         fly_speed = 40.0 * dt
+        
+        # Boss and Friend fly away
         villainStar.posZ += fly_speed
         jeep2Obj.posZ += fly_speed 
         
-    # -- END: Transition to Game --
+        # Minions chase them!
+        for s in minionStars:
+            s.posZ += fly_speed
+
     else:
         startGameplay()
-
 
 def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
@@ -1262,6 +1294,9 @@ def main():
         cone.makeDisplayLists()
 
     villainStar.makeDisplayLists()
+
+    for s in minionStars:
+        s.makeDisplayLists()
 
     for star in allstars:
         star.makeDisplayLists()
