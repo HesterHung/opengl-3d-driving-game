@@ -58,6 +58,7 @@ STARS_TO_WIN = 10
 star_effect_timer = 0.0
 last_star_x = 0.0
 last_star_z = 0.0
+boss_battle_active = False
 
 #for wheel spinning
 tickTime = 0
@@ -628,8 +629,10 @@ def display():
             if lightMode != 0: glEnable(GL_LIGHTING)
 
         glPopMatrix() 
+
+        if boss_battle_active:
+            villainStar.draw()
     
-        # --- NEW: ENLARGED 2D HUD (Score & Timer) ---
         glDisable(GL_LIGHTING) 
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
@@ -646,7 +649,12 @@ def display():
 
         # Draw Score Text (Stroke Font = Scalable)
         glColor3f(1.0, 1.0, 1.0) 
-        score_msg = ": {} / {}".format(stars_collected, STARS_TO_WIN)
+        if boss_battle_active:
+            score_msg = ": HIT THE BOSS!"
+            # Flash Red/White for urgency
+            if int(introTime * 10) % 2 == 0: glColor3f(1.0, 0.0, 0.0)
+        else:
+            score_msg = ": {} / {}".format(stars_collected, STARS_TO_WIN)
         
         glPushMatrix()
         glTranslatef(75, windowHeight - 50, 0) # Position next to star
@@ -764,6 +772,7 @@ def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
     global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime, timeLeft
     global stars_collected, STARS_TO_WIN, star_effect_timer
+    global boss_battle_active, villainStar, currentMode
 
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
@@ -772,19 +781,16 @@ def idle():
     if currentMode == MODE_GAME:
         # Calculate elapsed time
         elapsed = (curTime / 1000.0) - gameStartTime
-        
-        # Calculate Time Left
         timeLeft = GAME_DURATION - elapsed
         
-        # Check for Game Over
         if timeLeft <= 0:
             timeLeft = 0
-            canStart = False         # Lock movement
-            jeepObj.wheelDir = 'stop' # Stop wheels visually
+            canStart = False
+            jeepObj.wheelDir = 'stop'
             
-        score = timeLeft # Keep score variable synced just in case
+        score = timeLeft 
     else:
-        timeLeft = GAME_DURATION # Reset timer when not playing
+        timeLeft = GAME_DURATION 
 
     if tickTime == 0: 
         glutPostRedisplay()
@@ -792,7 +798,6 @@ def idle():
 
     seconds_passed = tickTime / 1000.0
     
-    # --- CHANGED: Logic ONLY here. Drawing moved to display() ---
     if currentMode == MODE_INTRO:
             updateIntro(seconds_passed)
 
@@ -801,7 +806,7 @@ def idle():
         if star_effect_timer > 0:
             star_effect_timer -= seconds_passed
 
-        # Game Logic
+        # --- Jeep Movement Logic ---
         boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ)
         if boost_on:
             moveSpeed = BOOST_SPEED
@@ -816,7 +821,6 @@ def idle():
 
             oldX = jeepObj.posX
             oldZ = jeepObj.posZ
-
             isMoving = False
 
             if keyState['up']:
@@ -842,39 +846,82 @@ def idle():
                 jeepObj.posZ = oldZ
                 jeepObj.wheelDir = 'stop'
         
-        for s in allstars:
-            s.update(seconds_passed) 
+        # --- 1. NORMAL GAME LOOP (Collecting Stars) ---
+        if not boss_battle_active:
+            for s in allstars:
+                s.update(seconds_passed) 
+                
+                # Move the star
+                moveAmount = s.speed * seconds_passed
+                s.posX += moveAmount * s.direction
+                
+                # Bounce off walls
+                if s.posX > land - 5:
+                    s.posX = land - 5
+                    s.direction = -1
+                elif s.posX < -land + 5:
+                    s.posX = -land + 5
+                    s.direction = 1
+
+                # Collision Check (Player vs Small Star)
+                if s.posY > 0: 
+                    if dist((jeepObj.posX, jeepObj.posZ), (s.posX, s.posZ)) < (jeepObj.sizeX + 1.0):
+                        
+                        # 1. Visual Effects
+                        last_star_x = s.posX
+                        last_star_z = s.posZ
+                        s.posY = -100.0 # Hide the star
+                        stars_collected += 1
+                        star_effect_timer = 0.4
+
+                        # 2. CHECK TRIGGER FOR BOSS (10/10)
+                        if stars_collected >= 10:
+                            boss_battle_active = True
+                            
+                            # Clear small stars
+                            for star_obj in allstars: star_obj.posY = -100.0
+                            
+                            # Summon Giant Star
+                            villainStar.posX = 0.0
+                            villainStar.posZ = jeepObj.posZ + 50.0
+                            
+                            villainStar.posY = 3.6
+                            
+                            villainStar.sizeX = 4.0 
+                            villainStar.sizeY = 4.0
+                            villainStar.sizeZ = 4.0
+                            
+                            print("BOSS SUMMONED!")
+
+            # Animation for wheels
+            if jeepObj.wheelDir == 'fwd':
+                jeepObj.rotateWheel(-0.1 * tickTime)
+            elif jeepObj.wheelDir == 'back':
+                jeepObj.rotateWheel(0.1 * tickTime)
+
+        # --- 2. BOSS BATTLE LOGIC ---
+        else:
+            # Rotate the boss to look menacing
+            villainStar.rotation += 100 * seconds_passed
             
-            # Move the star
-            moveAmount = s.speed * seconds_passed
-            s.posX += moveAmount * s.direction
+            # Allow player to drive towards boss
+            if jeepObj.wheelDir == 'fwd':
+                jeepObj.rotateWheel(-0.1 * tickTime)
             
-            # Bounce off walls
-            if s.posX > land - 5:
-                s.posX = land - 5
-                s.direction = -1
-            elif s.posX < -land + 5:
-                s.posX = -land + 5
-                s.direction = 1
-
-            if s.posY > 0: 
-                if dist((jeepObj.posX, jeepObj.posZ), (s.posX, s.posZ)) < (jeepObj.sizeX + 1.0):
-                    
-                    last_star_x = s.posX
-                    last_star_z = s.posZ
-
-                    s.posY = -100.0 
-                    stars_collected += 1
-                    star_effect_timer = 0.4
-
-
-        if jeepObj.wheelDir == 'fwd':
-            jeepObj.rotateWheel(-0.1 * tickTime)
-        elif jeepObj.wheelDir == 'back':
-            jeepObj.rotateWheel(0.1 * tickTime)
+            # Check Collision
+            if dist((jeepObj.posX, jeepObj.posZ), (villainStar.posX, villainStar.posZ)) < (villainStar.sizeX + 2.0):
+                 # 1. Turn off the battle flag IMMEDIATELY so this doesn't run again
+                 boss_battle_active = False
+                 
+                 # 2. Stop the game logic
+                 canStart = False 
+                 currentMode = -1 # Optional: Switch to a "Safe" mode
+                 
+                 # 3. Trigger Win Screen ONCE
+                 gameSuccess()
 
     elif currentMode == MODE_DISPLAY:
-        # Display Mode Logic
+        # Display Mode Logic (Unchanged)
         moveAmount = moveSpeed * seconds_passed
         rotAmount = rotSpeed * seconds_passed
         
@@ -897,8 +944,7 @@ def idle():
         elif jeepObj.wheelDir == 'back':
             jeepObj.rotateWheel(0.1 * tickTime)
     
-    glutPostRedisplay()
-    
+    glutPostRedisplay() 
 
 #---------------------------------setting camera----------------------------
 def setView():
@@ -1181,6 +1227,8 @@ def reshape(w, h):
 
 def startGameplay():
     global currentMode, jeepObj, canStart, gameStartTime, stars_collected
+    global stars_collected, boss_battle_active
+
     currentMode = MODE_GAME
     
     jeepObj.posX = 0.0
@@ -1188,6 +1236,7 @@ def startGameplay():
     
     canStart = True 
     stars_collected = 0
+    boss_battle_active = False
     
     for s in allstars:
         s.posY = 2.0
