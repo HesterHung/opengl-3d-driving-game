@@ -1,6 +1,7 @@
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
+import ShaderProgram
 
 class StreetLight:
     def __init__(self, x, z, lightID=None):
@@ -45,6 +46,9 @@ class StreetLight:
     def enableLight(self):
         # Configure the OpenGL light source at the bulb's position
         glEnable(self.lightID)
+        if ShaderProgram.current_shader:
+            idx = self.lightID - GL_LIGHT0
+            ShaderProgram.current_shader.set_uniform_bool(f"lightEnabled[{idx}]", True)
         
         # Position: (x, y, z, w). w=1.0 means Point Light.
         # We use 0,0,0 here because we already Translated to the bulb position above

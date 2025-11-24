@@ -8,6 +8,16 @@ import PIL.Image as Image
 import jeep, cone, star, ribbon, NurbsLoader, streetlight, sky
 import tkinter as tk            
 from tkinter import ttk          
+from ShaderProgram import ShaderProgram
+
+shaderProgram = None
+
+def initShaders():
+    global shaderProgram
+    shaderProgram = ShaderProgram("../shaders/basic.vert", "../shaders/basic.frag")
+    if shaderProgram.program_id == 0:
+        print("Shader compilation failed, falling back to fixed function pipeline.")
+        shaderProgram = None
 
 # --- Mode Constants ---
 MODE_GAME = 0
@@ -216,6 +226,7 @@ class Scene:
 
     def drawLand(self):
         glEnable(GL_TEXTURE_2D)
+        if shaderProgram: shaderProgram.set_uniform_bool("useTexture", True)
         
         if lightMode == 0:
             glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
@@ -224,6 +235,7 @@ class Scene:
             glColor3f(1.0, 1.0, 1.0)
             glMaterialfv(GL_FRONT, GL_AMBIENT, [0.2, 0.2, 0.2, 1.0])
             glMaterialfv(GL_FRONT, GL_DIFFUSE, [1.0, 1.0, 1.0, 1.0])
+            glMaterialfv(GL_FRONT, GL_SPECULAR, [0.0, 0.0, 0.0, 1.0])
 
         glBindTexture(GL_TEXTURE_2D, roadTextureID)
 
@@ -271,6 +283,7 @@ class Scene:
         glEnd()
 
         glDisable(GL_TEXTURE_2D)
+        if shaderProgram: shaderProgram.set_uniform_bool("useTexture", False)
 
 #--------------------------------------populating scene----------------
 def staticObjects():
@@ -339,13 +352,22 @@ def display():
 
     glEnable(GL_NORMALIZE)
 
+    if shaderProgram:
+        shaderProgram.use()
+        shaderProgram.set_uniform_1i("useLighting", 1 if lightMode != 0 else 0)
+        shaderProgram.set_uniform_1i("useTexture", 0)
+        for i in range(8):
+             shaderProgram.set_uniform_bool(f"lightEnabled[{i}]", False)
+
     # --- 1. GLOBAL LIGHTING SETUP ---
     if lightMode == 0:  # Ambient/Flat
         glDisable(GL_LIGHTING)
         glDisable(GL_LIGHT0)
+        if shaderProgram: shaderProgram.set_uniform_bool("lightEnabled[0]", False)
     else:
         glEnable(GL_LIGHTING)
         glEnable(GL_LIGHT0) 
+        if shaderProgram: shaderProgram.set_uniform_bool("lightEnabled[0]", True) 
 
         current_light_color = light0_Intensity 
         light_pos = [0.0, 10.0, 5.0, 1.0]
@@ -393,22 +415,15 @@ def display():
         glLightfv(GL_LIGHT0, GL_DIFFUSE, current_light_color)
         glLightfv(GL_LIGHT0, GL_SPECULAR, current_light_color)
 
+    if shaderProgram: shaderProgram.set_uniform_bool("useLighting", False)
     skyObj.draw()
+    if shaderProgram and lightMode != 0: shaderProgram.set_uniform_bool("useLighting", True)
 
     # --- 2. DRAW BASED ON MODE ---
     if currentMode == MODE_INTRO:
         # === INTRO MODE RENDER ===
-        # Draw Scene (Road, Sky, Tunnel)
-        for obj in objectArray: 
-            obj.draw()
-            
-        glDisable(GL_LIGHTING) 
-        ribbonObj.draw() 
-        if lightMode != 0: glEnable(GL_LIGHTING)
         
-        tunnelObj.draw()
-
-        # --- NEW: STREETLIGHTS ADDED BACK ---
+        # --- NEW: Setup Streetlights BEFORE drawing the scene ---
         # 1. Calculate distance to current Jeep position
         light_distances = []
         for sl in allstreetlights:
@@ -420,27 +435,45 @@ def display():
         available_ids = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
 
         # 3. Reset hardware lights to prevent ghosts
-        for i in available_ids: glDisable(i)
+        for i in available_ids: 
+            glDisable(i)
+            if shaderProgram: shaderProgram.set_uniform_bool(f"lightEnabled[{i-GL_LIGHT0}]", False)
 
-        # 4. Assign IDs and Draw
+        # 4. Assign IDs and Enable Lights
         for i, (dist, sl) in enumerate(light_distances):
             if i < len(available_ids):
                 sl.lightID = available_ids[i]
+                # Enable the light now so it affects the floor
+                glPushMatrix()
+                glTranslatef(sl.posX, sl.height, sl.posZ)
+                sl.enableLight()
+                glPopMatrix()
             else:
                 sl.lightID = None
-            sl.draw() 
         # ------------------------------------
+
+        # Draw Scene (Road, Sky, Tunnel)
+        for obj in objectArray: 
+            obj.draw()
+            
+        glDisable(GL_LIGHTING) 
+        if shaderProgram: 
+            shaderProgram.set_uniform_bool("useTexture", False)
+            shaderProgram.set_uniform_bool("useLighting", False)
+        ribbonObj.draw() 
+        if lightMode != 0: 
+            glEnable(GL_LIGHTING)
+            if shaderProgram: shaderProgram.set_uniform_bool("useLighting", True)
+        
+        tunnelObj.draw()
+        
+        # Draw Streetlights
+        for sl in allstreetlights:
+            sl.draw()
         
         # Draw Actors
         jeepObj.draw() 
-        jeepObj.drawW1()
-        jeepObj.drawW2()
-        glPopMatrix() # Pop matrix from jeepObj.draw()
-        
-        jeep2Obj.draw() 
-        jeep2Obj.drawW1()
-        jeep2Obj.drawW2()
-        glPopMatrix() # Pop matrix from jeep2Obj.draw()
+        jeep2Obj.draw()
         
         if introTime > 5.0:
             villainStar.draw()
@@ -451,6 +484,7 @@ def display():
 
         # --- HUD: 2D Overlay for Story & Skip Text ---
         glDisable(GL_LIGHTING)
+        if shaderProgram: shaderProgram.stop()
 
         # 1. Switch to 2D View
         glMatrixMode(GL_PROJECTION)
@@ -518,11 +552,9 @@ def display():
         # === DISPLAY MODE RENDER ===
         drawDisplayModeEnvironment()
         jeepObj.draw()
-        jeepObj.drawW1()
-        jeepObj.drawW2()
-        glPopMatrix() # <--- CRITICAL: Pop matrix from jeepObj.draw()
         
         glDisable(GL_LIGHTING)
+        if shaderProgram: shaderProgram.stop()
         glColor3f(0.0, 1.0, 1.0)
         mode_name = "Ambient"
         if lightMode == 1: mode_name = "Point"
@@ -533,29 +565,61 @@ def display():
         
     elif currentMode == MODE_VICTORY:
         # 1. Draw Environment
+        if shaderProgram: shaderProgram.set_uniform_bool("useLighting", False)
         skyObj.draw()
+        if shaderProgram and lightMode != 0: shaderProgram.set_uniform_bool("useLighting", True)
+        
         if lightMode != 0: glEnable(GL_LIGHTING)
+        
+        # --- NEW: Setup Streetlights BEFORE drawing the scene ---
+        light_distances = []
+        for sl in allstreetlights:
+            dist = abs(sl.posZ - jeepObj.posZ)
+            light_distances.append((dist, sl))
+
+        light_distances.sort(key=lambda x: x[0])
+        available_ids = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
+
+        # Reset lights
+        for i in available_ids: 
+            glDisable(i)
+            if shaderProgram: shaderProgram.set_uniform_bool(f"lightEnabled[{i-GL_LIGHT0}]", False)
+
+        # Assign and Enable Lights
+        for i, (dist, sl) in enumerate(light_distances):
+            if i < len(available_ids):
+                sl.lightID = available_ids[i]
+                # Enable the light now so it affects the floor
+                glPushMatrix()
+                glTranslatef(sl.posX, sl.height, sl.posZ)
+                sl.enableLight()
+                glPopMatrix()
+            else:
+                sl.lightID = None
+        # -------------------------------------------------------
         
         for obj in objectArray: obj.draw() # Floor/Axis
         tunnelObj.draw()
+        
+        glDisable(GL_LIGHTING)
+        if shaderProgram: 
+            shaderProgram.set_uniform_bool("useTexture", False)
+            shaderProgram.set_uniform_bool("useLighting", False)
         ribbonObj.draw()
+        if lightMode != 0: 
+            glEnable(GL_LIGHTING)
+            if shaderProgram: shaderProgram.set_uniform_bool("useLighting", True)
         
         # Draw Streetlights
         for sl in allstreetlights: sl.draw()
 
         # 2. Draw the Happy Jeeps
         jeepObj.draw()
-        jeepObj.drawW1()
-        jeepObj.drawW2()
-        glPopMatrix() 
-        
-        jeep2Obj.draw()
-        jeep2Obj.drawW1()
-        jeep2Obj.drawW2()
-        glPopMatrix() 
+        jeep2Obj.draw() 
 
         # 3. Draw Victory HUD
         glDisable(GL_LIGHTING)
+        if shaderProgram: shaderProgram.stop()
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
         glLoadIdentity()
@@ -599,6 +663,7 @@ def display():
         # Headlights
         if jeepObj.lightOn and lightMode != 0: 
             glEnable(GL_LIGHT1)
+            if shaderProgram: shaderProgram.set_uniform_bool("lightEnabled[1]", True)
             glPushMatrix()
             glTranslatef(jeepObj.posX, jeepObj.posY, jeepObj.posZ)
             glRotatef(jeepObj.rotation, 0.0, 1.0, 0.0)
@@ -615,6 +680,7 @@ def display():
             glPopMatrix()
         else:
             glDisable(GL_LIGHT1)
+            if shaderProgram: shaderProgram.set_uniform_bool("lightEnabled[1]", False)
 
         # Text
         glDisable(GL_LIGHTING)
@@ -628,13 +694,45 @@ def display():
         if lightMode != 0:
             glEnable(GL_LIGHTING)
 
+        # --- NEW: Setup Streetlights BEFORE drawing the scene ---
+        light_distances = []
+        for sl in allstreetlights:
+            dist = abs(sl.posZ - jeepObj.posZ)
+            light_distances.append((dist, sl))
+
+        light_distances.sort(key=lambda x: x[0])
+        available_ids = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
+
+        # Reset lights
+        for i in available_ids: 
+            glDisable(i)
+            if shaderProgram: shaderProgram.set_uniform_bool(f"lightEnabled[{i-GL_LIGHT0}]", False)
+
+        # Assign and Enable Lights
+        for i, (dist, sl) in enumerate(light_distances):
+            if i < len(available_ids):
+                sl.lightID = available_ids[i]
+                # Enable the light now so it affects the floor
+                glPushMatrix()
+                glTranslatef(sl.posX, sl.height, sl.posZ)
+                sl.enableLight()
+                glPopMatrix()
+            else:
+                sl.lightID = None
+        # -------------------------------------------------------
+
         # Draw Objects
         for obj in objectArray: 
             obj.draw()
 
         glDisable(GL_LIGHTING) 
+        if shaderProgram: 
+            shaderProgram.set_uniform_bool("useTexture", False)
+            shaderProgram.set_uniform_bool("useLighting", False)
         ribbonObj.draw() 
-        if lightMode != 0: glEnable(GL_LIGHTING)
+        if lightMode != 0: 
+            glEnable(GL_LIGHTING)
+            if shaderProgram: shaderProgram.set_uniform_bool("useLighting", True)
 
         if lightMode == 4:
             glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.2, 0.2, 0.2, 1.0])
@@ -645,25 +743,6 @@ def display():
 
         glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [0.0, 0.0, 0.0, 1.0])
 
-        # Streetlights Optimization
-        light_distances = []
-        for sl in allstreetlights:
-            dist = abs(sl.posZ - jeepObj.posZ)
-            light_distances.append((dist, sl))
-
-        light_distances.sort(key=lambda x: x[0])
-        available_ids = [GL_LIGHT2, GL_LIGHT3, GL_LIGHT4, GL_LIGHT5, GL_LIGHT6, GL_LIGHT7]
-
-        # Reset lights
-        for i in available_ids: glDisable(i)
-
-        for i, (dist, sl) in enumerate(light_distances):
-            if i < len(available_ids):
-                sl.lightID = available_ids[i]
-            else:
-                sl.lightID = None
-            sl.draw() 
-
         # Remaining objects
         for sl in allstreetlights: sl.draw()
         for cone in allcones: cone.draw()
@@ -671,9 +750,6 @@ def display():
 
         # Draw Player Jeep
         jeepObj.draw()
-        jeepObj.drawW1()
-        jeepObj.drawW2()
-        jeepObj.drawLight()
 
         if star_effect_timer > 0:
             glDisable(GL_LIGHTING) 
@@ -686,7 +762,8 @@ def display():
             
             glPushMatrix()
             
-            glTranslatef(last_star_x, 2.0, last_star_z) 
+            # Make the effect follow the Jeep
+            glTranslatef(jeepObj.posX, jeepObj.posY + 1.0, jeepObj.posZ) 
             
             glLineWidth(3.0)
             glutWireSphere(expansion, 10, 10)
@@ -696,12 +773,11 @@ def display():
             
             if lightMode != 0: glEnable(GL_LIGHTING)
 
-        glPopMatrix() 
-
         if boss_battle_active:
             villainStar.draw()
     
         glDisable(GL_LIGHTING) 
+        if shaderProgram: shaderProgram.stop()
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
         glLoadIdentity()
@@ -766,6 +842,9 @@ def display():
         glMatrixMode(GL_MODELVIEW)
         
         if lightMode != 0: glEnable(GL_LIGHTING)
+
+    if shaderProgram:
+        shaderProgram.stop()
 
     glutSwapBuffers()
 
@@ -1615,6 +1694,8 @@ def main():
     glutAttachMenu(GLUT_RIGHT_BUTTON)
 
     loadSceneTextures()
+
+    initShaders()
 
     jeep1Obj.makeDisplayLists()
     jeep2Obj.makeDisplayLists()
