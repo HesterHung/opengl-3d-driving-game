@@ -2,6 +2,7 @@
 import OpenGL.GL as GL
 import OpenGL.GLUT as GLUT
 import OpenGL.GLU as GLU
+import ShaderProgram
 ## Avoid conflict with Python open
 from PIL.Image import open as imageOpen
 
@@ -199,9 +200,15 @@ class ImportedObject:
         GL.glMaterialfv(GL.GL_FRONT, GL.GL_DIFFUSE, mat_diffuse)
         ## Set the material ambient values for the polygon front faces.   
         GL.glMaterialfv(GL.GL_FRONT, GL.GL_AMBIENT, mat_ambient)
+
         ## See if there is a texture and bind it if it's there
         if mat[5] != None:
             GL.glBindTexture(GL.GL_TEXTURE_2D, mat[5])
+            if ShaderProgram.current_shader:
+                ShaderProgram.current_shader.set_uniform_bool("useTexture", True)
+        else:
+            if ShaderProgram.current_shader:
+                ShaderProgram.current_shader.set_uniform_bool("useTexture", False)
                         
 
     ## Load a texture from the provided image file name

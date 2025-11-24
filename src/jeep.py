@@ -3,6 +3,7 @@ from OpenGL.GLUT import *
 from OpenGL.GLU import *
 import math, time
 import ImportObject
+import ShaderProgram
 
 
 class jeep:
@@ -87,6 +88,10 @@ class jeep:
         
     
     def draw(self):
+        # Ensure textures are disabled for the Jeep to prevent "gold" effect
+        if ShaderProgram.current_shader:
+            ShaderProgram.current_shader.set_uniform_bool("useTexture", False)
+
         glPushMatrix() # This is the start of the master transform
         
         # 1. Move to the jeep's (x,z) position on the ground plane
@@ -103,10 +108,17 @@ class jeep:
 
         # 5. Draw the body
         glCallList(self.displayList)
+        # self.obj.drawObject()
         
-        # We do NOT call glPopMatrix() here
+        # 6. Draw wheels and lights (using the current transform context)
+        self._drawW1()
+        self._drawW2()
+        self.drawLight()
+        
+        glPopMatrix() # End of master transform - NOW SELF-CONTAINED!
 
-    def drawW1(self):
+    def _drawW1(self):
+        # Private method - called internally by draw()
         # The master transform (pos, rot, scale) is ALREADY active
         glPushMatrix() # Save the master transform state
         
@@ -126,10 +138,12 @@ class jeep:
         
         # 4. Draw the wheel
         glCallList(self.wheel1DL)
+        # self.wheel1.drawObject()
         
         glPopMatrix() # Restore back to the master transform
 
-    def drawW2(self):
+    def _drawW2(self):
+        # Private method - called internally by draw()
         # The master transform (pos, rot, scale) is ALREADY active
         glPushMatrix() # Save the master transform state
         
@@ -149,6 +163,7 @@ class jeep:
         
         # 4. Draw the wheel
         glCallList(self.wheel2DL)
+        # self.wheel2.drawObject()
         
         glPopMatrix() # Restore back to the master transform
 
@@ -159,13 +174,16 @@ class jeep:
         self.revWheelTurn = 360 - self.wheelTurn
 
     def drawLight(self):
+        # Private method - called internally by draw()
         # The master transform (pos, rot, scale) is ALREADY active
         # These lights are drawn relative to the jeep's origin
         
         if self.lightOn == True:
             glCallList(self.litDL)
+            # self.litL.drawObject()
         elif self.lightOn == False:
             glCallList(self.dimDL)
+            # self.dimL.drawObject()
   
     def move(self, rot, val): 
         if rot == False: 
