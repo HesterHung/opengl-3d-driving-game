@@ -200,6 +200,8 @@ villainStar.sizeZ = 3.0
 villainStar.posY = 20.0 # Start high in the air
 
 victoryTimer = 0.0
+victoryX = 0.0
+victoryZ = 0.0
 finalTimeStr = ""
 
 minionStars = []
@@ -400,23 +402,27 @@ class Scene:
         glBindTexture(GL_TEXTURE_2D, roadTextureID)
 
         L = self.landLength
-        C = self.cont
         
         minX = -L
         maxX = L
         totalWidth = maxX - minX
 
-        minZ = -L
-        maxZ = C * L
-        totalLength = maxZ - minZ
+        # --- INFINITE ROAD LOGIC ---
+        # Draw road relative to Jeep to appear infinite
+        currentZ = jeepObj.posZ
+        
+        # Draw from behind the jeep to far ahead
+        startZ = currentZ - 50.0
+        endZ = currentZ + 300.0 
+        
+        # Snap to grid to prevent jittering
+        step = 2.0
+        startZ = math.floor(startZ / step) * step
+        endZ = math.ceil(endZ / step) * step
 
-        startZ = minZ
-        endZ = maxZ
         startX = minX
         endX = maxX
         
-        step = 2.0
-
         glNormal3f(0.0, 1.0, 0.0) 
 
         glBegin(GL_QUADS)
@@ -430,8 +436,10 @@ class Scene:
                 u1 = (L - x1) / totalWidth
                 u2 = (L - x2) / totalWidth
 
-                v1 = (maxZ - z1) / totalLength
-                v2 = (maxZ - z2) / totalLength
+                # Use world Z coordinates for V to allow infinite tiling
+                # Scaling factor 0.05 controls texture repetition frequency
+                v1 = z1 * 0.05
+                v2 = z2 * 0.05
 
                 glTexCoord2f(u1, v1); glVertex3f(x1, 0, z1)
                 glTexCoord2f(u1, v2); glVertex3f(x1, 0, z2)
@@ -503,6 +511,64 @@ def isColliding():
         return True
         
     return False
+
+def calculateSpotlightIntensity(tx, ty, tz, jeep):
+    # 1. Calculate Light World Position
+    # Local: (0, 1, 3) relative to Jeep
+    # Rotated around Y by jeep.rotation
+    rad = math.radians(jeep.rotation)
+    sin_r = math.sin(rad)
+    cos_r = math.cos(rad)
+    
+    # Offset from jeep center
+    lx_offset = 3.0 * sin_r
+    ly_offset = 1.0
+    lz_offset = 3.0 * cos_r
+    
+    light_x = jeep.posX + lx_offset
+    light_y = jeep.posY + ly_offset
+    light_z = jeep.posZ + lz_offset
+    
+    # 2. Calculate Light World Direction
+    # Local Direction: (0, -1, 1)
+    # Rotated: x' = sin, y' = -1, z' = cos
+    dir_x = sin_r
+    dir_y = -1.0
+    dir_z = cos_r
+    
+    # Normalize direction
+    dir_len = math.sqrt(dir_x*dir_x + dir_y*dir_y + dir_z*dir_z)
+    dir_x /= dir_len
+    dir_y /= dir_len
+    dir_z /= dir_len
+    
+    # 3. Vector to Target
+    to_target_x = tx - light_x
+    to_target_y = ty - light_y
+    to_target_z = tz - light_z
+    
+    dist_sq = to_target_x**2 + to_target_y**2 + to_target_z**2
+    dist = math.sqrt(dist_sq)
+    
+    if dist == 0: return 1.0
+    if dist > 25.0: return 0.0 # Max range (increased for better feel)
+    
+    # Normalize vector to target
+    to_target_x /= dist
+    to_target_y /= dist
+    to_target_z /= dist
+    
+    # 4. Dot Product (Cosine of angle)
+    dot = to_target_x * dir_x + to_target_y * dir_y + to_target_z * dir_z
+    
+    # Cutoff is 60 degrees. cos(60) = 0.5
+    if dot < 0.5: return 0.0
+    
+    # Intensity based on angle (dot) and distance
+    dist_factor = 1.0 - (dist / 25.0)
+    angle_factor = (dot - 0.5) * 2.0
+    
+    return dist_factor * angle_factor
 
 def display():
     global jeepObj, canStart, score, beginTime, countTime, lightMode, timeLeft, GAME_DURATION
@@ -1166,6 +1232,41 @@ def idle():
                 jeepObj.posX = oldX
                 jeepObj.posZ = oldZ
                 jeepObj.wheelDir = 'stop'
+
+        # --- INFINITE WORLD RECYCLING ---
+        # Recycle objects that are too far behind the jeep
+        recycle_dist = 50.0
+        spawn_dist = 200.0
+        
+        # 1. Streetlights
+        for sl in allstreetlights:
+            if sl.posZ < jeepObj.posZ - recycle_dist:
+                sl.posZ += (spawn_dist + recycle_dist)
+        
+        # 2. Stars (Only if not in boss battle)
+        if not boss_battle_active:
+            for s in allstars:
+                if s.posZ < jeepObj.posZ - recycle_dist:
+                    s.posZ += (spawn_dist + recycle_dist)
+                    s.posY = 2.0 # Reset height if it was collected
+                    s.posX = random.uniform(-land + 5, land - 5) # Randomize X
+        
+        # 3. Cones
+        for c in allcones:
+            if c.posZ < jeepObj.posZ - recycle_dist:
+                c.posZ += (spawn_dist + recycle_dist)
+                c.posX = random.uniform(-land + 2, land - 2)
+                # Update collision coord list (This is tricky with the current list structure)
+                # Ideally, we should rebuild obstacleCoord list every frame or use objects directly
+                # For now, we'll just update the object position. 
+                # The collision check uses 'obstacleCoord' which is a list of tuples.
+                # We need to update that list.
+        
+        # Rebuild obstacleCoord list for collision detection
+        obstacleCoord[:] = [] # Clear list
+        for c in allcones:
+            obstacleCoord.append((c.posX, c.posZ))
+
         
         # --- 1. NORMAL GAME LOOP (Collecting Stars) ---
         if not boss_battle_active:
@@ -1205,13 +1306,11 @@ def idle():
 
                 # 3. Check Jeep Headlights
                 if jeepObj.lightOn:
-                    # Jeep is at (jeepObj.posX, jeepObj.posY, jeepObj.posZ)
-                    dist_sq = (s.posX - jeepObj.posX)**2 + \
-                              (s.posY - jeepObj.posY)**2 + \
-                              (s.posZ - jeepObj.posZ)**2
-                    
-                    if dist_sq < 49.0: # Distance < 7 (Slightly larger range for car)
-                        current_star_speed *= 0.3
+                    intensity = calculateSpotlightIntensity(s.posX, s.posY, s.posZ, jeepObj)
+                    if intensity > 0:
+                        # Slow down based on intensity (Higher intensity = Slower speed)
+                        # At max intensity (1.0), speed is reduced by 80%
+                        current_star_speed *= (1.0 - 0.8 * intensity)
 
                 # Move the star
                 moveAmount = current_star_speed * seconds_passed
@@ -1266,6 +1365,45 @@ def idle():
             # Rotate the boss to look menacing
             villainStar.rotation += 100 * seconds_passed
             
+            # --- BOSS MOVEMENT ---
+            # 1. Calculate Speed (React to Light)
+            boss_speed = 4.0 # Base speed (slower than jeep's normal speed)
+            
+            # Check Main Light
+            main_light_pos = None
+            if lightMode == 1: main_light_pos = (0.0, 6.0, 0.0)
+            elif lightMode == 3: main_light_pos = (0.0, 8.0, 0.0)
+            
+            if main_light_pos:
+                dist_sq = (villainStar.posX - main_light_pos[0])**2 + \
+                          (villainStar.posY - main_light_pos[1])**2 + \
+                          (villainStar.posZ - main_light_pos[2])**2
+                if dist_sq < 100.0: boss_speed *= 0.2 # Slow down A LOT
+            
+            # Check Streetlights
+            for sl in allstreetlights:
+                sl_y = sl.height
+                dist_sq = (villainStar.posX - sl.posX)**2 + \
+                          (villainStar.posY - sl_y)**2 + \
+                          (villainStar.posZ - sl.posZ)**2
+                if dist_sq < 36.0: 
+                    boss_speed *= 0.2
+                    break
+
+            # Check Jeep Headlights
+            if jeepObj.lightOn:
+                intensity = calculateSpotlightIntensity(villainStar.posX, villainStar.posY, villainStar.posZ, jeepObj)
+                if intensity > 0:
+                    boss_speed *= (1.0 - 0.8 * intensity)
+
+            # 2. Move Forward
+            villainStar.posZ += boss_speed * seconds_passed
+            
+            # 3. Move Left/Right (Sine Wave)
+            # Use rotation as a time proxy since it increments steadily
+            # Amplitude = 10, Frequency = based on rotation speed
+            villainStar.posX = 10.0 * math.sin(villainStar.rotation * 0.02)
+
             # Allow player to drive towards boss
             if jeepObj.wheelDir == 'fwd':
                 jeepObj.rotateWheel(-0.1 * tickTime)
@@ -1311,6 +1449,7 @@ def idle():
 #---------------------------------setting camera----------------------------
 def setView():
     global eyeX, eyeY, eyeZ, windowWidth, windowHeight, currentMode, introTime, jeepObj, victoryTimer
+    global victoryX, victoryZ
     
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
@@ -1341,9 +1480,9 @@ def setView():
         orbit_radius = 22.0 
         orbit_speed = 0.5
         
-        # Center point is between the two jeeps (Jeep1 at 0, Jeep2 at 3)
-        center_x = 1.5 
-        center_z = 0.0
+        # Center point is the victory location
+        center_x = victoryX 
+        center_z = victoryZ
         
         # Calculate Rotating Eye Position
         camX = center_x + math.cos(victoryTimer * orbit_speed) * orbit_radius
@@ -1489,7 +1628,8 @@ def myKeyboard(key, mX, mY):
         recalculateEyePos()
 
     elif key == b'l': 
-        jeepObj.toggleLight()
+        if currentMode != MODE_VICTORY:
+            jeepObj.toggleLight()
 
     elif key == b' ': 
         if currentMode == MODE_INTRO:
@@ -1613,8 +1753,9 @@ def collisionCheck():
         overReason = "You ran off the road!"
         gameOver()
 
-    if (jeepObj.posZ >= land*gameEnlarge):
-        gameSuccess()
+    # Removed fixed finish line for infinite road
+    # if (jeepObj.posZ >= land*gameEnlarge):
+    #    gameSuccess()
         
 #----------------------------------multiplayer dev (using tracker)-----------
 def recordGame():
@@ -1641,7 +1782,9 @@ def gameOver():
 def gameSuccess():
     global currentMode, victoryTimer, jeepObj, jeep2Obj, villainStar, boss_battle_active
     global finalTimeStr, timeLeft, GAME_DURATION
+    global victoryX, victoryZ
     
+       
     print("Game success! Starting Victory Sequence...")
     
     # 1. Calculate Final Time String (Capture it NOW before it resets)
@@ -1658,13 +1801,18 @@ def gameSuccess():
     # 3. Hide the Boss
     villainStar.posY = -100.0
     
-    # 4. Teleport Everyone back to Origin (Safety Zone for Rendering)
-    jeepObj.posX = -3.5
-    jeepObj.posZ = 0.0
+    # 4. Position Jeeps at the Victory Location (Where the boss was beaten)
+    # Capture the location where the event happened
+    victoryX = jeepObj.posX
+    victoryZ = jeepObj.posZ
+    
+    # Place them side-by-side at this location
+    jeepObj.posX = victoryX - 3.5
+    jeepObj.posZ = victoryZ
     jeepObj.posY = 2.0
     
-    jeep2Obj.posX = 3.5
-    jeep2Obj.posZ = 0.0
+    jeep2Obj.posX = victoryX + 3.5
+    jeep2Obj.posZ = victoryZ
     jeep2Obj.posY = 2.0
     
     # 5. Stop wheels and orient forward
@@ -1672,6 +1820,9 @@ def gameSuccess():
     jeep2Obj.wheelDir = 'stop'
     jeepObj.rotation = 0
     jeep2Obj.rotation = 0
+    
+    # 6. Turn off headlights
+    jeepObj.lightOn = False
 
 def winScreen():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -1930,3 +2081,4 @@ def main():
     glutMainLoop()
     
 main()
+
