@@ -18,6 +18,7 @@ class Sky:
 
     def draw(self):
         # 1. Save current state
+        glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT)
         glPushMatrix()
         
         # 2. Disable lighting so stars/moon glow (use pure color)
@@ -43,6 +44,6 @@ class Sky:
         # Draw Moon Sphere
         glutSolidSphere(15.0, 20, 20) 
 
-        # 3. Restore lighting (if it was enabled previously)
-        glEnable(GL_LIGHTING)
+        # 3. Restore state
         glPopMatrix()
+        glPopAttrib()

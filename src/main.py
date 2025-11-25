@@ -12,6 +12,22 @@ from ShaderProgram import ShaderProgram
 
 shaderProgram = None
 
+class Projectile:
+    def __init__(self, x, y, z, vx, vz, p_type="normal"):
+        self.posX = x
+        self.posY = y
+        self.posZ = z
+        self.velX = vx
+        self.velZ = vz
+        self.life = 5.0 # Seconds to live
+        self.p_type = p_type
+        self.rotation = 0.0
+
+projectiles = []
+boss_attack_timer = 0.0
+projectileModel = None
+jeep_blocked_vector = None
+
 class JSONNurbsLoader:
     def __init__(self, filename, color=(0.5, 0.5, 0.5)):
         self.color = color
@@ -189,10 +205,12 @@ MODE_GAME = 0
 MODE_DISPLAY = 1
 MODE_INTRO = 2
 MODE_VICTORY = 3
+MODE_GAME_OVER = 4
 currentMode = MODE_GAME # Default
 
 # --- Intro Story Variables ---
 introTime = 0.0
+gameOverTimer = 0.0
 villainStar = star.star(0, 50) # Spawn it further down the road
 villainStar.sizeX = 3.0 # Make it a BIG boss star
 villainStar.sizeY = 3.0
@@ -322,7 +340,7 @@ NORMAL_ROT_SPEED = rotSpeed
 BOOST_SPEED = 25.0
 BOOST_ROT_SPEED = 120.0 
 
-ribbonObj = ribbon.ribbon(z_pos=50.0, length=5.0, width=land)
+ribbonObj = ribbon.RibbonManager(land)
 
 tunnelObj = JSONNurbsLoader(os.path.join(os.path.dirname(__file__), "nurbs_export.json"), color=(0.4, 0.4, 0.4))
 
@@ -455,8 +473,12 @@ class Scene:
 
 #--------------------------------------populating scene----------------
 def staticObjects():
-    global objectArray
+    global objectArray, projectileModel
     objectArray.append(Scene())
+    projectileModel = star.star(0,0)
+    projectileModel.sizeX = 0.5
+    projectileModel.sizeY = 0.5
+    projectileModel.sizeZ = 0.5
     print ('append')
 
 
@@ -642,7 +664,13 @@ def display():
         glLightfv(GL_LIGHT0, GL_SPECULAR, current_light_color)
 
     if shaderProgram: shaderProgram.set_uniform_bool("useLighting", False)
+    
+    # Move sky with player to create infinite background effect
+    glPushMatrix()
+    glTranslatef(jeepObj.posX, 0.0, jeepObj.posZ)
     skyObj.draw()
+    glPopMatrix()
+    
     if shaderProgram and lightMode != 0: shaderProgram.set_uniform_bool("useLighting", True)
 
     # --- 2. DRAW BASED ON MODE ---
@@ -789,6 +817,82 @@ def display():
         elif lightMode == 4: mode_name = "Default (Moonlight)"
         text3d(f"Display Mode: {mode_name}", -2.0, 4.0, 0.0)
         
+    elif currentMode == MODE_GAME_OVER:
+        # === GAME OVER RENDER ===
+        
+        # Fade out lighting based on timer (starts after 1s, fades over 4s)
+        fade = 1.0
+        if gameOverTimer > 1.0:
+            fade = max(0.0, 1.0 - ((gameOverTimer - 1.0) * 0.25))
+        
+        if lightMode != 0:
+            glEnable(GL_LIGHTING)
+            # Dim global light
+            dimmed_light = [c * fade for c in light0_Intensity]
+            glLightfv(GL_LIGHT0, GL_DIFFUSE, dimmed_light)
+            glLightfv(GL_LIGHT0, GL_SPECULAR, dimmed_light)
+        
+        # Draw Scene
+        for obj in objectArray: obj.draw()
+        tunnelObj.draw()
+        ribbonObj.draw()
+        
+        # Draw Boss
+        villainStar.draw()
+        
+        # Draw Projectile (Big Red Star)
+        for p in projectiles:
+            glPushMatrix()
+            glTranslatef(p.posX, p.posY, p.posZ)
+            glRotatef(p.rotation, 0.0, 1.0, 0.0)
+            glScalef(5.0, 5.0, 5.0) # HUGE
+            
+            # Glowing Red
+            if lightMode != 0:
+                glPushAttrib(GL_LIGHTING_BIT)
+                glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [1.0 * fade, 0.0, 0.0, 1.0])
+                
+            if projectileModel: projectileModel.obj.drawObject()
+            
+            if lightMode != 0: glPopAttrib()
+            glPopMatrix()
+            
+        # Draw Jeep
+        jeepObj.draw()
+        
+        # Draw "GAME OVER" Text
+        glDisable(GL_LIGHTING)
+        if shaderProgram: shaderProgram.stop()
+        
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(0, windowWidth, 0, windowHeight)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glDisable(GL_DEPTH_TEST)
+        
+        glColor3f(1.0, 0.0, 0.0) # Red, staying bright
+        msg = "GAME OVER"
+        glLineWidth(4.0)
+        
+        glPushMatrix()
+        # Center text roughly
+        glTranslatef(windowWidth/2 - 150, windowHeight/2, 0)
+        glScalef(0.5, 0.5, 1.0)
+        for char in msg: glutStrokeCharacter(GLUT_STROKE_ROMAN, ord(char))
+        glPopMatrix()
+        
+        glLineWidth(1.0)
+        glEnable(GL_DEPTH_TEST)
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        
+        if lightMode != 0: glEnable(GL_LIGHTING)
+
     elif currentMode == MODE_VICTORY:
         # 1. Draw Environment
         if shaderProgram: shaderProgram.set_uniform_bool("useLighting", False)
@@ -1001,6 +1105,33 @@ def display():
 
         if boss_battle_active:
             villainStar.draw()
+            
+            # Draw Projectiles
+            for p in projectiles:
+                glPushMatrix()
+                glTranslatef(p.posX, p.posY, p.posZ)
+                glRotatef(p.rotation, 0.0, 1.0, 0.0)
+                
+                # Scale based on type
+                scale = 2.0
+                if p.p_type == "big_star":
+                    scale = 3.0
+                
+                glScalef(scale, scale, scale)
+                
+                # Make them glow red/orange
+                if lightMode != 0:
+                    glPushAttrib(GL_LIGHTING_BIT)
+                    # High emission to look like fire/energy
+                    glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, [1.0, 0.2, 0.0, 1.0])
+                    
+                if projectileModel:
+                    projectileModel.obj.drawObject()
+                
+                if lightMode != 0:
+                    glPopAttrib()
+                    
+                glPopMatrix()
     
         glDisable(GL_LIGHTING) 
         if shaderProgram: shaderProgram.stop()
@@ -1145,7 +1276,8 @@ def idle():
     global tickTime, prevTime, score, keyState, jeepObj, canStart, moveSpeed, rotSpeed
     global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime, timeLeft
     global stars_collected, STARS_TO_WIN, star_effect_timer
-    global boss_battle_active, villainStar, currentMode, victoryTimer
+    global boss_battle_active, villainStar, currentMode, victoryTimer, gameOverTimer
+    global jeep_blocked_vector, projectiles
 
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
@@ -1160,6 +1292,22 @@ def idle():
             timeLeft = 0
             canStart = False
             jeepObj.wheelDir = 'stop'
+            
+            # Transition to Game Over
+            currentMode = MODE_GAME_OVER
+            gameOverTimer = 0.0
+            
+            # Setup Boss
+            villainStar.posX = 0.0
+            villainStar.posZ = jeepObj.posZ + 40.0
+            villainStar.posY = 5.0
+            villainStar.rotation = 180.0 
+            
+            # Clear projectiles and add the "Big Red Star"
+            projectiles = []
+            # Create a big star moving towards player
+            p = Projectile(villainStar.posX, villainStar.posY, villainStar.posZ, 0.0, -15.0, "game_over_star")
+            projectiles.append(p)
             
         score = timeLeft 
 
@@ -1185,6 +1333,31 @@ def idle():
         glutPostRedisplay()
         return
     
+    if currentMode == MODE_GAME_OVER:
+        gameOverTimer += seconds_passed
+        
+        # Update Projectiles (The Big Red Star)
+        for p in projectiles:
+            # Move projectile
+            p.posZ += p.velZ * seconds_passed
+            p.rotation += 200 * seconds_passed
+            
+            # Check collision with Jeep
+            if dist((jeepObj.posX, jeepObj.posZ), (p.posX, p.posZ)) < 4.0:
+                # Hit! Push player back into darkness
+                push_speed = 40.0
+                jeepObj.posZ -= push_speed * seconds_passed
+                
+                # Keep projectile attached
+                p.posZ = jeepObj.posZ + 3.0 
+                p.velZ = -push_speed # Match speed
+                
+                # Spin jeep out of control
+                jeepObj.rotation += 360 * seconds_passed
+        
+        glutPostRedisplay()
+        return
+
     if currentMode == MODE_INTRO:
             updateIntro(seconds_passed)
 
@@ -1194,7 +1367,7 @@ def idle():
             star_effect_timer -= seconds_passed
 
         # --- Jeep Movement Logic ---
-        boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ)
+        boost_on, boost_off, is_active = ribbonObj.update(seconds_passed, jeepObj.posZ, jeepObj.posX)
         if boost_on:
             moveSpeed = BOOST_SPEED
             rotSpeed = BOOST_ROT_SPEED
@@ -1210,10 +1383,20 @@ def idle():
             oldZ = jeepObj.posZ
             isMoving = False
 
+            # --- Check for blocked movement ---
+            blocked_forward = False
+            if jeep_blocked_vector:
+                rad = math.radians(jeepObj.rotation)
+                fx = math.sin(rad)
+                fz = math.cos(rad)
+                bx, bz = jeep_blocked_vector
+                if (fx * bx + fz * bz) > 0: blocked_forward = True
+
             if keyState['up']:
-                jeepObj.move(False, moveAmount)
-                jeepObj.wheelDir = 'fwd'
-                isMoving = True
+                if not blocked_forward:
+                    jeepObj.move(False, moveAmount)
+                    jeepObj.wheelDir = 'fwd'
+                    isMoving = True
             elif keyState['down']:
                 jeepObj.move(False, -moveAmount)
                 jeepObj.wheelDir = 'back'
@@ -1234,31 +1417,47 @@ def idle():
                 jeepObj.wheelDir = 'stop'
 
         # --- INFINITE WORLD RECYCLING ---
-        # Recycle objects that are too far behind the jeep
+        # Recycle objects that are too far behind (or ahead) of the jeep
         recycle_dist = 50.0
         spawn_dist = 200.0
+        total_span = recycle_dist + spawn_dist
         
         # 1. Streetlights
         for sl in allstreetlights:
+            # Too far behind (Player moving forward)
             if sl.posZ < jeepObj.posZ - recycle_dist:
-                sl.posZ += (spawn_dist + recycle_dist)
+                sl.posZ += total_span
+            # Too far ahead (Player moving backward)
+            elif sl.posZ > jeepObj.posZ + spawn_dist:
+                sl.posZ -= total_span
         
         # 2. Stars (Only if not in boss battle)
         if not boss_battle_active:
             for s in allstars:
+                # Too far behind
                 if s.posZ < jeepObj.posZ - recycle_dist:
-                    s.posZ += (spawn_dist + recycle_dist)
+                    s.posZ += total_span
                     s.posY = 2.0 # Reset height if it was collected
                     s.posX = random.uniform(-land + 5, land - 5) # Randomize X
+                # Too far ahead
+                elif s.posZ > jeepObj.posZ + spawn_dist:
+                    s.posZ -= total_span
+                    s.posY = 2.0
+                    s.posX = random.uniform(-land + 5, land - 5)
         
         # 3. Cones
         for c in allcones:
+            # Too far behind
             if c.posZ < jeepObj.posZ - recycle_dist:
-                c.posZ += (spawn_dist + recycle_dist)
+                c.posZ += total_span
+                c.posX = random.uniform(-land + 2, land - 2)
+            # Too far ahead
+            elif c.posZ > jeepObj.posZ + spawn_dist:
+                c.posZ -= total_span
                 c.posX = random.uniform(-land + 2, land - 2)
                 # Update collision coord list (This is tricky with the current list structure)
                 # Ideally, we should rebuild obstacleCoord list every frame or use objects directly
-                # For now, we'll just update the object position. 
+                # For now, we'll just update the object position.
                 # The collision check uses 'obstacleCoord' which is a list of tuples.
                 # We need to update that list.
         
@@ -1270,6 +1469,7 @@ def idle():
         
         # --- 1. NORMAL GAME LOOP (Collecting Stars) ---
         if not boss_battle_active:
+            jeep_blocked_vector = None
             for s in allstars:
                 s.update(seconds_passed) 
                 
@@ -1362,6 +1562,110 @@ def idle():
 
         # --- 2. BOSS BATTLE LOGIC ---
         else:
+            # --- BOSS ATTACK LOGIC ---
+            global boss_attack_timer
+            boss_attack_timer -= seconds_passed
+            if boss_attack_timer <= 0:
+                boss_attack_timer = 2.0 # Attack every 2 seconds
+                
+                # Determine number of attacks (30% chance for double attack)
+                num_attacks = 1
+                if random.random() < 0.3:
+                    num_attacks = 2
+                    print("Boss Double Attack Triggered!")
+                
+                for _ in range(num_attacks):
+                    attack_type = random.choice(['direct', 'spread', 'big_star'])
+                    
+                    if attack_type == 'direct':
+                        # Calculate vector to jeep
+                        dx = jeepObj.posX - villainStar.posX
+                        dz = jeepObj.posZ - villainStar.posZ
+                        dist_val = math.sqrt(dx*dx + dz*dz)
+                        speed = 15.0
+                        if dist_val > 0:
+                            vx = (dx / dist_val) * speed
+                            vz = (dz / dist_val) * speed
+                            projectiles.append(Projectile(villainStar.posX, villainStar.posY, villainStar.posZ, vx, vz, "direct"))
+                            print("Boss Attack: Direct Shot!")
+                    
+                    elif attack_type == 'spread':
+                        # Shoot 3 stars
+                        dx = jeepObj.posX - villainStar.posX
+                        dz = jeepObj.posZ - villainStar.posZ
+                        angle_to_player = math.atan2(dx, dz) 
+                        
+                        speed = 12.0
+                        offsets = [-0.3, 0.0, 0.3] # Radians
+                        
+                        for offset in offsets:
+                            angle = angle_to_player + offset
+                            vx = math.sin(angle) * speed
+                            vz = math.cos(angle) * speed
+                            projectiles.append(Projectile(villainStar.posX, villainStar.posY, villainStar.posZ, vx, vz, "spread"))
+                        print("Boss Attack: Spread Shot!")
+
+                    elif attack_type == 'big_star':
+                        # Shoot 1 BIG star
+                        dx = jeepObj.posX - villainStar.posX
+                        dz = jeepObj.posZ - villainStar.posZ
+                        dist_val = math.sqrt(dx*dx + dz*dz)
+                        speed = 10.0 # Slower but bigger
+                        if dist_val > 0:
+                            vx = (dx / dist_val) * speed
+                            vz = (dz / dist_val) * speed
+                            projectiles.append(Projectile(villainStar.posX, villainStar.posY, villainStar.posZ, vx, vz, "big_star"))
+                        print("Boss Attack: BIG STAR!")
+
+            # Update Projectiles
+            new_blocked_vector = None
+            for p in projectiles[:]:
+                p.posX += p.velX * seconds_passed
+                p.posZ += p.velZ * seconds_passed
+                p.rotation += 300 * seconds_passed
+                p.life -= seconds_passed
+                
+                if p.life <= 0:
+                    projectiles.remove(p)
+                    continue
+                
+                # Collision with Jeep
+                hit_radius = 2.5
+                if p.p_type == "big_star":
+                    hit_radius = 3.5 # Larger hit radius for big star
+
+                if dist((jeepObj.posX, jeepObj.posZ), (p.posX, p.posZ)) < hit_radius: 
+                    # Continuous Push Effect
+                    # Instead of removing the projectile, we push the player along with it
+                    
+                    # 1. Calculate potential new X position
+                    next_posX = jeepObj.posX + p.velX * seconds_passed
+                    
+                    # Match safe_limit with isColliding() logic: land - (2.0 * sizeX)
+                    # We subtract a small buffer (0.2) to ensure we are strictly inside
+                    safe_limit = land - (2.0 * jeepObj.sizeX) - 0.2
+                    
+                    # 2. Check if this push would send the jeep out of bounds
+                    if next_posX > safe_limit:
+                        # The player is being pinned against the wall.
+                        # Destroy the projectile and clamp position with buffer
+                        jeepObj.posX = safe_limit
+                        projectiles.remove(p)
+                        continue # Stop processing this projectile
+                    elif next_posX < -safe_limit:
+                        jeepObj.posX = -safe_limit
+                        projectiles.remove(p)
+                        continue
+
+                    # 3. Apply velocity to player (Push them)
+                    jeepObj.posX = next_posX
+                    jeepObj.posZ += p.velZ * seconds_passed
+                    
+                    # 4. Set blocked vector
+                    new_blocked_vector = (p.posX - jeepObj.posX, p.posZ - jeepObj.posZ)
+            
+            jeep_blocked_vector = new_blocked_vector
+
             # Rotate the boss to look menacing
             villainStar.rotation += 100 * seconds_passed
             
@@ -2076,6 +2380,11 @@ def main():
         star.makeDisplayLists()
     
     staticObjects()
+    
+    # Ensure projectile model is loaded
+    if projectileModel:
+        projectileModel.makeDisplayLists()
+        
     if (applyLighting == True):
         initializeLight()
     glutMainLoop()
