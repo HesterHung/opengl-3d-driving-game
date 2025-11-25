@@ -2,7 +2,7 @@
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
-import math, time, random, csv, datetime
+import math, time, random, csv, datetime, json, os
 import ImportObject
 import PIL.Image as Image
 import jeep, cone, star, ribbon, NurbsLoader, streetlight, sky
@@ -11,6 +11,171 @@ from tkinter import ttk
 from ShaderProgram import ShaderProgram
 
 shaderProgram = None
+
+class JSONNurbsLoader:
+    def __init__(self, filename, color=(0.5, 0.5, 0.5)):
+        self.color = color
+        self.nurbsRenderer = gluNewNurbsRenderer()
+        
+        # Setup rendering properties for "True" NURBS
+        # Lower tolerance = smoother curve (default is 50.0)
+        gluNurbsProperty(self.nurbsRenderer, GLU_SAMPLING_TOLERANCE, 5.0)
+        # Switch to Fill mode for a solid surface
+        gluNurbsProperty(self.nurbsRenderer, GLU_DISPLAY_MODE, GLU_FILL)
+        
+        # Load the JSON data
+        self.valid = False
+        try:
+            with open(filename, 'r') as f:
+                data = json.load(f)
+            
+            surface = data["nurbs_surface"]
+            self.degree_u = surface["degree_u"]
+            self.degree_v = surface["degree_v"]
+            
+            # RAW KNOTS
+            self.knots_u = surface["knot_vector_u"]
+            self.knots_v = surface["knot_vector_v"]
+            
+            # 1. Interpret JSON control points.
+            # Analysis of the points suggests 8 strips of 5 points (Meridians).
+            # 40 points total.
+            raw_points = surface["control_points"]
+            self.total_points = len(raw_points)
+
+            # Heuristic to detect grid dimensions
+            if self.total_points == 40:
+                # Sphere/Dome: 8 strips of 5 points
+                self.u_count = 8
+                self.v_count = 5
+            elif self.total_points == 10:
+                # Arch/Tunnel: 5 strips of 2 points (Linear extrusion)
+                self.u_count = 5
+                self.v_count = 2
+            else:
+                # Fallback: Try to guess based on degree or just assume square
+                # If degree_v is 1, it's likely v_count=2
+                if self.degree_v == 1:
+                     self.v_count = 2
+                     self.u_count = self.total_points // 2
+                else:
+                     self.u_count = 4
+                     self.v_count = 10
+            
+            # Reshape flat list into [u][v][4] (x,y,z,w)
+            self.ctrlpoints = []
+            
+            idx = 0
+            for i in range(self.u_count):
+                row = []
+                for j in range(self.v_count):
+                    if idx < len(raw_points):
+                        p = raw_points[idx]
+                        # Create Rational Point (wx, wy, wz, w)
+                        # Note: GLU expects pre-multiplied coordinates for Rational surfaces
+                        wx = p['x'] * p['w']
+                        wy = p['y'] * p['w']
+                        wz = p['z'] * p['w']
+                        row.append([wx, wy, wz, p['w']])
+                    else:
+                        row.append([0,0,0,1])
+                    idx += 1
+                self.ctrlpoints.append(row)
+            
+            # 2. Close the loop for the sphere (U direction)
+            # Only apply this for the sphere model (40 points) which is known to be a revolution.
+            if self.total_points == 40:
+                first_strip = self.ctrlpoints[0]
+                last_strip = self.ctrlpoints[-1]
+                
+                # Simple check: compare first point of first and last strip
+                p1 = first_strip[0]
+                p2 = last_strip[0]
+                dist = math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 + (p1[2]-p2[2])**2)
+                
+                if dist > 0.001:
+                    print("Closing the NURBS loop by duplicating the first strip.")
+                    self.ctrlpoints.append(first_strip)
+                    self.u_count += 1
+
+            # Check if knot vectors are valid, if not, regenerate them
+            required_u = self.u_count + self.degree_u + 1
+            required_v = self.v_count + self.degree_v + 1
+            
+            if len(self.knots_u) != required_u:
+                print(f"Regenerating U knots. Expected {required_u}, got {len(self.knots_u)}")
+                self.knots_u = self.generate_knot_vector(self.degree_u, self.u_count)
+
+            if len(self.knots_v) != required_v:
+                print(f"Regenerating V knots. Expected {required_v}, got {len(self.knots_v)}")
+                self.knots_v = self.generate_knot_vector(self.degree_v, self.v_count)
+
+            self.valid = True
+            print(f"Loaded NURBS JSON: {self.u_count}x{self.v_count} grid.")
+
+        except Exception as e:
+            print(f"Failed to load NURBS JSON: {e}")
+
+    def generate_knot_vector(self, degree, num_points):
+        # Clamped uniform knot vector
+        order = degree + 1
+        num_segments = num_points - degree
+        
+        knots = [0.0] * order
+        for i in range(1, num_segments):
+            knots.append(i / float(num_segments))
+        knots.extend([1.0] * order)
+        
+        return knots
+
+    def makeDisplayLists(self):
+        self.displayList = glGenLists(1)
+        glNewList(self.displayList, GL_COMPILE)
+        
+        # Enable auto-normal generation for lighting
+        glEnable(GL_AUTO_NORMAL)
+        glEnable(GL_NORMALIZE)
+
+        # Set Material Properties for the NURBS surface
+        # A shiny red material to show curvature
+        glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, [0.2, 0.0, 0.0, 1.0])
+        glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, [0.8, 0.0, 0.0, 1.0])
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, [1.0, 1.0, 1.0, 1.0])
+        glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 50.0)
+
+        gluBeginSurface(self.nurbsRenderer)
+        try:
+            # Use PyOpenGL's Pythonic gluNurbsSurface wrapper which
+            # derives strides and orders automatically from the 3D
+            # control-point array and knot vectors.
+            gluNurbsSurface(
+                self.nurbsRenderer,
+                self.knots_u,
+                self.knots_v,
+                self.ctrlpoints,
+                GL_MAP2_VERTEX_4
+            )
+        except Exception as e:
+            print(f"NURBS surface render error: {e}")
+        gluEndSurface(self.nurbsRenderer)
+        
+        glEndList()
+
+    def draw(self):
+        if not self.valid: return
+        
+        glPushMatrix()
+        # Place the tunnel clearly in front of the jeeps, above the road
+        glTranslatef(0.0, 0.0, 100.0)
+        glScalef(20.0, 20.0, 40.0)
+        
+        if self.displayList:
+            glCallList(self.displayList)
+        else:
+            self.makeDisplayLists()
+            glCallList(self.displayList)
+        
+        glPopMatrix()
 
 def initShaders():
     global shaderProgram
@@ -157,12 +322,7 @@ BOOST_ROT_SPEED = 120.0
 
 ribbonObj = ribbon.ribbon(z_pos=50.0, length=5.0, width=land)
 
-tunnelObj = NurbsLoader.NurbsModel(
-    0.0, 0.0, 100.0, 
-    "../nurbs/tunnel.txt", 
-    scale=(2.5, 3.5, 2.5), 
-    color=(0.4, 0.4, 0.4)
-)
+tunnelObj = JSONNurbsLoader(os.path.join(os.path.dirname(__file__), "nurbs_export.json"), color=(0.4, 0.4, 0.4))
 
 #concerned with lighting
 applyLighting = False
@@ -1700,6 +1860,8 @@ def main():
     jeep1Obj.makeDisplayLists()
     jeep2Obj.makeDisplayLists()
     jeep3Obj.makeDisplayLists()
+    
+    tunnelObj.makeDisplayLists()
 
     setupStreetLights()
 
