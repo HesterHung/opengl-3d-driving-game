@@ -1172,8 +1172,49 @@ def idle():
             for s in allstars:
                 s.update(seconds_passed) 
                 
+                # --- LIGHT REACTION LOGIC ---
+                # Default speed
+                current_star_speed = s.speed
+                
+                # 1. Check Main Light (GL_LIGHT0)
+                # Only Point (1) and Spot (3) have a specific position that matters for proximity
+                main_light_pos = None
+                if lightMode == 1: # Point
+                    main_light_pos = (0.0, 6.0, 0.0)
+                elif lightMode == 3: # Spot
+                    main_light_pos = (0.0, 8.0, 0.0)
+                
+                if main_light_pos:
+                    dist_sq = (s.posX - main_light_pos[0])**2 + \
+                              (s.posY - main_light_pos[1])**2 + \
+                              (s.posZ - main_light_pos[2])**2
+                    if dist_sq < 100.0: # Distance < 10
+                        current_star_speed *= 0.3 # Slow down significantly
+                
+                # 2. Check Streetlights
+                for sl in allstreetlights:
+                    # Streetlight bulb is at (sl.posX, sl.height, sl.posZ)
+                    sl_y = sl.height
+                    dist_sq = (s.posX - sl.posX)**2 + \
+                              (s.posY - sl_y)**2 + \
+                              (s.posZ - sl.posZ)**2
+                    
+                    if dist_sq < 36.0: # Distance < 6 (Close to the pole)
+                        current_star_speed *= 0.3
+                        break # Found one, no need to check others
+
+                # 3. Check Jeep Headlights
+                if jeepObj.lightOn:
+                    # Jeep is at (jeepObj.posX, jeepObj.posY, jeepObj.posZ)
+                    dist_sq = (s.posX - jeepObj.posX)**2 + \
+                              (s.posY - jeepObj.posY)**2 + \
+                              (s.posZ - jeepObj.posZ)**2
+                    
+                    if dist_sq < 49.0: # Distance < 7 (Slightly larger range for car)
+                        current_star_speed *= 0.3
+
                 # Move the star
-                moveAmount = s.speed * seconds_passed
+                moveAmount = current_star_speed * seconds_passed
                 s.posX += moveAmount * s.direction
                 
                 # Bounce off walls
