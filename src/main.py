@@ -626,6 +626,7 @@ def display():
             moon_color = [0.15, 0.15, 0.25, 1.0] 
             current_light_color = moon_color
             light_pos = [0.0, 10.0, 5.0, 0.0] 
+            glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
 
         else:
             # Day Modes
@@ -653,8 +654,13 @@ def display():
                     glEnable(GL_LIGHTING)
                     glPopMatrix()
             else:
-                if lightMode == 2: light_pos = [0.0, 1.0, 1.0, 0.0]
-                elif lightMode == 3: 
+                if lightMode == 1: # Point
+                    light_pos = [0.0, 10.0, 5.0, 1.0]
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
+                elif lightMode == 2: # Directional
+                    light_pos = [0.0, 1.0, 1.0, 0.0]
+                    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 180.0)
+                elif lightMode == 3: # Spot
                     light_pos = [0.0, 10.0, 0.0, 1.0]
                     glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [0.0, -1.0, 0.0])
                     glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 45.0)
