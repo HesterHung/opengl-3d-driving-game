@@ -2,7 +2,7 @@
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
-import math, time, random, csv, datetime, json, os
+import math, time, random, csv, datetime, json, os, sys
 import ImportObject
 import PIL.Image as Image
 import jeep, cone, star, ribbon, streetlight, sky
@@ -245,7 +245,7 @@ mainWin = 0
 centered = False
 
 gameStartTime = 0.0
-GAME_DURATION = 1000.0
+GAME_DURATION = 120.0
 timeLeft = GAME_DURATION
 beginTime = 0
 countTime = 0
@@ -2380,7 +2380,12 @@ def show_launcher():
         
         root.destroy()
 
+    def on_closing():
+        root.destroy()
+        sys.exit()
+
     root = tk.Tk()
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     root.title("Game Launcher")
 
     frame = ttk.Frame(root, padding="20")
