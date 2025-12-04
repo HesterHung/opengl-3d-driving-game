@@ -2004,15 +2004,15 @@ def menuFunc(value):
     
     elif value == 101: 
         if not isFullScreen:
-            glutReshapeWindow(600, 600)
+            glutReshapeWindow(800, 600)
     
     elif value == 102: 
         if not isFullScreen:
-            glutReshapeWindow(800, 800)
+            glutReshapeWindow(1024, 768)
 
     elif value == 103: 
         if not isFullScreen:
-            glutReshapeWindow(1024, 768)
+            glutReshapeWindow(1280, 960)
 
     elif value == 200:
         if not isFullScreen:
@@ -2396,9 +2396,9 @@ def show_launcher():
     ttk.Separator(frame, orient='horizontal').grid(row=3, column=0, sticky="ew", pady=10)
 
     ttk.Label(frame, text="Select Resolution:", font=('Helvetica', 10, 'bold')).grid(row=4, column=0, sticky=tk.W, pady=(0,5))
-    resolution_var = tk.StringVar(value="800x800") 
+    resolution_var = tk.StringVar(value="800x600") 
     
-    display_options = ["600x600", "800x800", "1024x768", "Start in Fullscreen"]
+    display_options = ["800x600", "1024x768", "1280x960", "Start in Fullscreen"]
     for i, option in enumerate(display_options):
         ttk.Radiobutton(frame, text=option, variable=resolution_var, value=option).grid(row=5+i, column=0, sticky=tk.W, padx=20)
 
@@ -2450,9 +2450,9 @@ def main():
     glutAddMenuEntry("Default (Dark)", 4)
 
     resMenu = glutCreateMenu(menuFunc)
-    glutAddMenuEntry("600 x 600", 101)
-    glutAddMenuEntry("800 x 800", 102)
-    glutAddMenuEntry("1024 x 768", 103)
+    glutAddMenuEntry("800 x 600", 101)
+    glutAddMenuEntry("1024 x 768", 102)
+    glutAddMenuEntry("1280 x 960", 103)
 
     glutCreateMenu(menuFunc)
     glutAddSubMenu("Lighting", lightMenu)
