@@ -240,6 +240,7 @@ prevPosX, prevPosY = 0, 0
 
 helpWindow = False
 helpWin = 0
+overWin = 0
 mainWin = 0
 centered = False
 
@@ -296,7 +297,7 @@ behindView = False
 #concerned with panning
 nowX = 0.0
 nowY = 0.0
-mouseSensitivity = 0.04
+mouseSensitivity = 0.01
 
 angle = 0.0
 radius = 10.0
@@ -885,12 +886,30 @@ def display():
         
         glPushMatrix()
         # Center text roughly
-        glTranslatef(windowWidth/2 - 150, windowHeight/2, 0)
+        glTranslatef(windowWidth/2 - 150, windowHeight/2 + 50, 0)
         glScalef(0.5, 0.5, 1.0)
         for char in msg: glutStrokeCharacter(GLUT_STROKE_ROMAN, ord(char))
         glPopMatrix()
         
         glLineWidth(1.0)
+
+        # Reason
+        glColor3f(1.0, 1.0, 1.0)
+        glRasterPos2f(windowWidth/2 - 100, windowHeight/2 - 20)
+        for char in str(overReason): glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+
+        # Score
+        glRasterPos2f(windowWidth/2 - 100, windowHeight/2 - 50)
+        score_msg = "Final Score: " + str(finalScore)
+        for char in score_msg: glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+
+        # Restart Instruction
+        if gameOverTimer > 1.0:
+            glColor3f(1.0, 1.0, 0.0)
+            restart_msg = "Press 'r' to Restart"
+            glRasterPos2f(windowWidth/2 - 100, windowHeight/2 - 100)
+            for char in restart_msg: glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+
         glEnable(GL_DEPTH_TEST)
         glPopMatrix()
         glMatrixMode(GL_PROJECTION)
@@ -985,6 +1004,13 @@ def display():
         glScalef(0.15, 0.15, 1.0)
         for char in time_msg: glutStrokeCharacter(GLUT_STROKE_ROMAN, ord(char))
         glPopMatrix()
+
+        # Restart Instruction
+        if victoryTimer > 1.0:
+            glColor3f(1.0, 1.0, 0.0)
+            restart_msg = "Press 'r' to Restart"
+            glRasterPos2f(50, 50)
+            for char in restart_msg: glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
 
         glLineWidth(1.0)
         glEnable(GL_DEPTH_TEST)
@@ -1204,6 +1230,25 @@ def display():
         glPopMatrix()
         glMatrixMode(GL_MODELVIEW)
         
+        if currentMode == MODE_VICTORY:
+             glDisable(GL_LIGHTING)
+             glMatrixMode(GL_PROJECTION)
+             glPushMatrix()
+             glLoadIdentity()
+             gluOrtho2D(0, windowWidth, 0, windowHeight)
+             glMatrixMode(GL_MODELVIEW)
+             glPushMatrix()
+             glLoadIdentity()
+             
+             glColor3f(1.0, 1.0, 0.0)
+             drawTextBitmap("Press 'r' to Restart", windowWidth/2 - 80, windowHeight/2 - 100)
+             
+             glPopMatrix()
+             glMatrixMode(GL_PROJECTION)
+             glPopMatrix()
+             glMatrixMode(GL_MODELVIEW)
+             if lightMode != 0: glEnable(GL_LIGHTING)
+
         if lightMode != 0: glEnable(GL_LIGHTING)
 
     if shaderProgram:
@@ -1283,7 +1328,7 @@ def idle():
     global aiStar, aiStarSpeed, aiStarDir, lightMode, gameStartTime, timeLeft
     global stars_collected, STARS_TO_WIN, star_effect_timer
     global boss_battle_active, villainStar, currentMode, victoryTimer, gameOverTimer
-    global jeep_blocked_vector, projectiles
+    global jeep_blocked_vector, projectiles, overReason, finalScore
 
     curTime = glutGet(GLUT_ELAPSED_TIME)
     tickTime =  curTime - prevTime
@@ -1302,6 +1347,11 @@ def idle():
             # Transition to Game Over
             currentMode = MODE_GAME_OVER
             gameOverTimer = 0.0
+            overReason = "Time's Up!"
+            finalScore = score
+            
+            # Move player to center so they get hit
+            jeepObj.posX = 0.0
             
             # Setup Boss
             villainStar.posX = 0.0
@@ -1821,9 +1871,11 @@ def setObjView():
 
 #-------------------------------------------user inputs------------------
 def mouseHandle(button, state, x, y):
-    global midDown
+    global midDown, nowX, nowY
     if (button == GLUT_MIDDLE_BUTTON and state == GLUT_DOWN):
         midDown = True
+        nowX = x
+        nowY = y
         print ('pushed')
     else:
         midDown = False    
@@ -1836,15 +1888,8 @@ def motionHandle(x,y):
         nowX = x
         nowY = y
 
-        if (nowX - pastX > 0):
-            angle -= mouseSensitivity 
-        elif (nowX - pastX < 0):
-            angle += mouseSensitivity
-        
-        if (nowY - pastY > 0): 
-            phi += mouseSensitivity 
-        elif (nowY - pastY < 0): 
-            phi -= mouseSensitivity 
+        angle -= (nowX - pastX) * mouseSensitivity
+        phi += (nowY - pastY) * mouseSensitivity
 
         if (phi > math.pi / 2.0 - 0.01):
             phi = math.pi / 2.0 - 0.01
@@ -1883,7 +1928,7 @@ def specialKeysUp(keypress, mX, mY):
 
 def myKeyboard(key, mX, mY):
     global eyeX, eyeY, eyeZ, angle, radius, helpWindow, centered, helpWin, overReason, topView, behindView, phi, jeepObj
-    global currentMode
+    global currentMode, gameOverTimer, victoryTimer
 
     if key == b'h':
         winNum = glutGetWindow()
@@ -1940,6 +1985,11 @@ def myKeyboard(key, mX, mY):
     elif key == b'l': 
         if currentMode != MODE_VICTORY:
             jeepObj.toggleLight()
+
+    elif key == b'r':
+        if (currentMode == MODE_GAME_OVER and gameOverTimer > 1.0) or \
+           (currentMode == MODE_VICTORY and victoryTimer > 1.0):
+            resetGame()
 
     elif key == b' ': 
         if currentMode == MODE_INTRO:
@@ -2077,17 +2127,74 @@ def recordGame():
         spamwriter.writerow([st] + [finalScore])
     
 #-------------------------------------developing additional windows/options----
+def resetGame():
+    global currentMode, jeepObj, jeep2Obj, canStart, score, stars_collected
+    global boss_battle_active, villainStar, projectiles, introTime, timeLeft
+    global overWin, mainWin, gameStartTime, allstars, allcones, obstacleCoord
+    global jeep_blocked_vector, allstreetlights
+    
+    # Reset Mode
+    currentMode = MODE_INTRO
+    introTime = 0.0
+    canStart = False
+    boss_battle_active = False
+    score = 0
+    stars_collected = 0
+    timeLeft = GAME_DURATION
+    jeep_blocked_vector = None
+    
+    # Reset Objects
+    jeepObj.posX = 0.0
+    jeepObj.posZ = 0.0
+    jeepObj.rotation = 0.0
+    jeepObj.wheelDir = 'stop'
+    jeepObj.lightOn = False
+    
+    jeep2Obj.posX = 3.0
+    jeep2Obj.posZ = 0.0
+    jeep2Obj.rotation = 0.0
+    jeep2Obj.wheelDir = 'stop'
+    
+    villainStar.posY = 20.0 # Reset boss position
+    villainStar.posX = 0.0
+    villainStar.posZ = 0.0 # Will be set in intro
+    villainStar.rotation = 0.0
+    
+    projectiles = []
+    
+    # Reset Stars
+    for s in allstars:
+        s.posY = 2.0
+        s.posX = random.uniform(-land + 5, land - 5)
+        s.posZ = random.randint(10, int(land*gameEnlarge))
+
+    # Reset Cones
+    obstacleCoord[:] = []
+    for c in allcones:
+        c.posX = random.uniform(-land + 2, land - 2)
+        c.posZ = random.randint(10, int(land*gameEnlarge))
+        obstacleCoord.append((c.posX, c.posZ))
+
+    # Reset Streetlights (Fix for missing lights on restart)
+    allstreetlights[:] = []
+    setupStreetLights()
+
+    # Handle Windows
+    if overWin != 0:
+        glutDestroyWindow(overWin)
+        overWin = 0
+        glutSetWindow(mainWin)
+        glutShowWindow()
+    
+    gameStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0
+    print("Game Reset!")
+
 def gameOver():
-    global finalScore
+    global finalScore, currentMode, gameOverTimer
     print ("Game completed!")
     finalScore = score-6
-    glutHideWindow()
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
-    glutInitWindowSize(windowWidth, windowHeight)
-    glutInitWindowPosition(600,100)
-    overWin = glutCreateWindow("Game Over!")
-    glutDisplayFunc(overScreen)
-    glutMainLoop()
+    currentMode = MODE_GAME_OVER
+    gameOverTimer = 0.0
     
 def gameSuccess():
     global currentMode, victoryTimer, jeepObj, jeep2Obj, villainStar, boss_battle_active
@@ -2157,6 +2264,10 @@ def overScreen():
     drawTextBitmap("Your score stopped at: ", -1.0, 0.0)
     glColor3f(1.0,1.0,1.0)
     drawTextBitmap(str(finalScore), -1.0, -0.15)
+    
+    glColor3f(1.0, 1.0, 0.0)
+    drawTextBitmap("Press 'r' to Restart", -1.0, -0.4)
+    
     glutSwapBuffers()
 
 def showHelp():
