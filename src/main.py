@@ -195,7 +195,7 @@ class JSONNurbsLoader:
 
 def initShaders():
     global shaderProgram
-    shaderProgram = ShaderProgram("../shaders/basic.vert", "../shaders/basic.frag")
+    shaderProgram = ShaderProgram("shaders/basic.vert", "shaders/basic.frag")
     if shaderProgram.program_id == 0:
         print("Shader compilation failed, falling back to fixed function pipeline.")
         shaderProgram = None
@@ -897,11 +897,6 @@ def display():
         glColor3f(1.0, 1.0, 1.0)
         glRasterPos2f(windowWidth/2 - 100, windowHeight/2 - 20)
         for char in str(overReason): glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
-
-        # Score
-        glRasterPos2f(windowWidth/2 - 100, windowHeight/2 - 50)
-        score_msg = "Final Score: " + str(finalScore)
-        for char in score_msg: glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
 
         # Restart Instruction
         if gameOverTimer > 1.0:
@@ -2328,7 +2323,7 @@ def loadTexture(imageName):
 
 def loadSceneTextures():
     global roadTextureID
-    roadTextureID = loadTexture("../img/road2.png")
+    roadTextureID = loadTexture("img/road2.png")
 
 def setupStreetLights():
     # We have GL_LIGHT2 through GL_LIGHT7 available (6 lights)

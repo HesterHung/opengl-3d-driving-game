@@ -29,7 +29,7 @@ class star:
     hit_timer = 0.0
     
     def __init__(self, x, z):
-        self.obj = ImportObject.ImportedObject("../objects/star")
+        self.obj = ImportObject.ImportedObject("objects/star")
         self.posX = x
         self.posZ = z
         self.hit_timer = 0.0 # Ensure it's initialized

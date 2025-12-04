@@ -214,9 +214,9 @@ class ImportedObject:
     ## Load a texture from the provided image file name
     def loadTexture(self, texFile):
         if texFile.startswith('textures\\'):
-            texFile = '../textures/' + texFile[9:]
+            texFile = 'textures/' + texFile[9:]
         else:
-            texFile = '../img/' + texFile
+            texFile = 'img/' + texFile
         if self.verbose:
             print("Loading " + texFile)
         ## Open the image file

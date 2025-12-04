@@ -44,15 +44,15 @@ class jeep:
     
     def __init__(self, color):
         if (color == 'p'):
-            self.obj = ImportObject.ImportedObject("../objects/jeepbare")
+            self.obj = ImportObject.ImportedObject("objects/jeepbare")
         elif (color == 'g'):
-            self.obj = ImportObject.ImportedObject("../objects/jeepbare2")
+            self.obj = ImportObject.ImportedObject("objects/jeepbare2")
         elif (color == 'r'):
-            self.obj = ImportObject.ImportedObject("../objects/jeepbare3")
-        self.wheel1 = ImportObject.ImportedObject("../objects/frontwheel")
-        self.wheel2 = ImportObject.ImportedObject("../objects/backwheel")
-        self.dimL = ImportObject.ImportedObject("../objects/dimlight")
-        self.litL = ImportObject.ImportedObject("../objects/litlight")
+            self.obj = ImportObject.ImportedObject("objects/jeepbare3")
+        self.wheel1 = ImportObject.ImportedObject("objects/frontwheel")
+        self.wheel2 = ImportObject.ImportedObject("objects/backwheel")
+        self.dimL = ImportObject.ImportedObject("objects/dimlight")
+        self.litL = ImportObject.ImportedObject("objects/litlight")
     
     def makeDisplayLists(self):
         self.obj.loadOBJ()
