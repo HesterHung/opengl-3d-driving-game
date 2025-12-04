@@ -5,7 +5,7 @@ from OpenGL.GLU import *
 import math, time, random, csv, datetime, json, os
 import ImportObject
 import PIL.Image as Image
-import jeep, cone, star, ribbon, NurbsLoader, streetlight, sky
+import jeep, cone, star, ribbon, streetlight, sky
 import tkinter as tk            
 from tkinter import ttk          
 from ShaderProgram import ShaderProgram
@@ -245,7 +245,7 @@ mainWin = 0
 centered = False
 
 gameStartTime = 0.0
-GAME_DURATION = 120.0
+GAME_DURATION = 1000.0
 timeLeft = GAME_DURATION
 beginTime = 0
 countTime = 0
